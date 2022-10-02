@@ -3,6 +3,9 @@ use bevy::{
     ecs::system::lifetimeless::SRes,
     prelude::{Plugin, *},
     render::{
+        extract_component::{
+            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+        },
         globals::{GlobalsBuffer, GlobalsUniform},
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
@@ -163,9 +166,9 @@ impl Default for VignetteVertices {
 }
 
 fn prepare_vignette_quad(
-    mut vignette_vertices: ResMut<VignetteVertices>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
+    mut vignette_vertices: ResMut<VignetteVertices>,
 ) {
     quad::write_quad_buffer(
         &mut vignette_vertices.vertices,
@@ -181,8 +184,77 @@ struct VignetteBindGroup {
 
 /// This component enables a vignette effect on the camera it is insert onto.
 /// Assumes the [`VignettePlugin`] has been added to the [`App`].
-#[derive(Debug, Component)]
-pub struct Vignette;
+#[derive(Debug, Component, Clone)]
+pub struct Vignette {
+    /// The radius of the effect.
+    /// A radius of 1.0 will cover the entire screen (in both axes).
+    /// A radius of less than 1.0 will start shrinking the effect towards the center of the screen.
+    pub radius: f32,
+
+    /// The distance of the smooth transition between the effect and the scene.
+    /// Note that this will add to the radius of the effect.
+    pub feathering: f32,
+
+    /// The color of the vignette.
+    /// Note that the alpha channel is used by the effect.
+    pub color: Color,
+}
+
+impl Vignette {
+    /// Create a vignette effect with the given parameters.
+    pub fn new(radius: f32, feathering: f32, color: Color) -> Self {
+        Self {
+            radius,
+            feathering,
+            color,
+        }
+    }
+}
+
+impl ExtractComponent for Vignette {
+    type Query = &'static Self;
+    type Filter = ();
+
+    fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
+        item.clone()
+    }
+}
+
+impl Default for Vignette {
+    fn default() -> Self {
+        let mut color = Color::BLACK;
+        color.set_a(0.8);
+
+        Self {
+            radius: 1.0,
+            feathering: 0.1,
+            color,
+        }
+    }
+}
+
+#[derive(Debug, Component, ShaderType, Clone)]
+struct VignetteUniform {
+    radius: f32,
+    feathering: f32,
+    color: Color,
+}
+
+impl From<Vignette> for VignetteUniform {
+    fn from(config: Vignette) -> Self {
+        Self {
+            radius: config.radius,
+            feathering: config.feathering,
+            color: config.color,
+        }
+    }
+}
+
+impl Default for VignetteUniform {
+    fn default() -> Self {
+        Vignette::default().into()
+    }
+}
 
 fn queue_vignette_bind_group(
     mut commands: Commands,
@@ -190,29 +262,34 @@ fn queue_vignette_bind_group(
     vignette_pipeline: Res<VignettePipeline>,
     globals_buffer: Res<GlobalsBuffer>,
     view_uniforms: Res<ViewUniforms>,
+    vignette_uniforms: Res<ComponentUniforms<VignetteUniform>>,
 ) {
-    commands.insert_resource(VignetteBindGroup {
-        bind_group: render_device.create_bind_group(&BindGroupDescriptor {
+    if let (Some(globals_binding), Some(view_binding), Some(vignette_binding)) = (
+        globals_buffer.buffer.binding(),
+        view_uniforms.uniforms.binding(),
+        vignette_uniforms.binding(),
+    ) {
+        let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
             label: Some("Vignette BindGroupDescriptor"),
             layout: &vignette_pipeline.layout,
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: globals_buffer
-                        .buffer
-                        .binding()
-                        .expect("GlobalsBuffer should have a buffer"),
+                    resource: globals_binding.clone(),
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: view_uniforms
-                        .uniforms
-                        .binding()
-                        .expect("ViewUniforms should have a buffer"),
+                    resource: view_binding.clone(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: vignette_binding.clone(),
                 },
             ],
-        }),
-    });
+        });
+
+        commands.insert_resource(VignetteBindGroup { bind_group });
+    }
 }
 
 fn queue_vignette_phase_items(
@@ -243,15 +320,16 @@ fn queue_vignette_phase_items(
 
 fn extract_vignette_cameras(
     mut commands: Commands,
-    query: Extract<Query<(Entity, &Camera), With<Vignette>>>,
+    query: Extract<Query<(Entity, &Camera, &Vignette)>>,
 ) {
-    for (entity, camera) in query.iter() {
+    for (entity, camera, vignette) in query.iter() {
         if !camera.is_active {
             continue;
         }
 
         commands
             .get_or_spawn(entity)
+            .insert(VignetteUniform::from(vignette.clone()))
             .insert(RenderPhase::<VignetteRenderPhase>::default());
     }
 }
@@ -340,6 +418,16 @@ impl FromWorld for VignettePipeline {
                     },
                     count: None,
                 },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(VignetteUniform::min_size()),
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -364,6 +452,9 @@ impl SpecializedRenderPipeline for VignettePipeline {
 
 impl Plugin for VignettePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
+        app.add_plugin(ExtractComponentPlugin::<Vignette>::default())
+            .add_plugin(UniformComponentPlugin::<VignetteUniform>::default());
+
         let render_app = app
             .get_sub_app_mut(RenderApp)
             .expect("Should be able to get RenderApp SubApp");
