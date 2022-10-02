@@ -25,6 +25,9 @@ use bevy::{
 
 use crate::{nodes, quad};
 
+/// This plugin allows adding a vignette effect to a given camera.
+/// Add this plugin to the [`App`] in order to use it.
+/// Then, add the [`Vignette`] component to the camera you want the effect to apply to.
 pub struct VignettePlugin;
 
 struct VignetteRenderPhase {
@@ -176,6 +179,8 @@ struct VignetteBindGroup {
     bind_group: BindGroup,
 }
 
+/// This component enables a vignette effect on the camera it is insert onto.
+/// Assumes the [`VignettePlugin`] has been added to the [`App`].
 #[derive(Debug, Component)]
 pub struct Vignette;
 
