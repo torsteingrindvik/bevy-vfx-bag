@@ -1,0 +1,16 @@
+[package]
+name = "bevy-vfx-bag"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { path = "../bevy" }
+bytemuck = "1.12.1"
+
+# bevy_mod_debugdump = "0.5.0"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
