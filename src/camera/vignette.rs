@@ -1,12 +1,14 @@
 use bevy::{
     core::{Pod, Zeroable},
-    ecs::system::lifetimeless::SRes,
+    ecs::system::lifetimeless::{Read, SQuery, SRes},
     prelude::{Plugin, *},
     render::{
+        camera::ExtractedCamera,
         extract_component::{
             ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
         },
         globals::{GlobalsBuffer, GlobalsUniform},
+        render_asset::RenderAssets,
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
             sort_phase_system, AddRenderCommand, CachedRenderPipelinePhaseItem, DrawFunctionId,
@@ -14,14 +16,17 @@ use bevy::{
             RenderPhase, SetItemPipeline, TrackedRenderPass,
         },
         render_resource::{
-            BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-            BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BufferBindingType,
-            BufferUsages, BufferVec, CachedRenderPipelineId, LoadOp, Operations, PipelineCache,
-            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-            ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines,
+            AddressMode::ClampToEdge, BindGroup, BindGroupDescriptor, BindGroupEntry,
+            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
+            BindingType, BufferBindingType, BufferUsages, BufferVec, CachedRenderPipelineId,
+            CompareFunction, FilterMode, LoadOp, Operations, PipelineCache,
+            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, Sampler,
+            SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType,
+            SpecializedRenderPipeline, SpecializedRenderPipelines, TextureSampleType, TextureView,
+            TextureViewDimension,
         },
         renderer::{RenderContext, RenderDevice, RenderQueue},
-        view::{ViewTarget, ViewUniform, ViewUniforms},
+        view::{ExtractedWindows, ViewTarget, ViewUniform, ViewUniforms},
         Extract, RenderApp, RenderStage,
     },
 };
@@ -105,10 +110,12 @@ impl Node for VignetteNode {
             return Ok(());
         }
 
+        let view = &target.view;
+
         let pass_descriptor = RenderPassDescriptor {
             label: Some("Vignette RenderPass"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: &target.view,
+                view,
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Load,
@@ -177,7 +184,26 @@ fn prepare_vignette_quad(
     );
 }
 
-#[derive(Resource)]
+fn prepare_vignette_view_bindings(
+    mut commands: Commands,
+    windows: Res<ExtractedWindows>,
+    images: Res<RenderAssets<Image>>,
+    views: Query<(Entity, &ExtractedCamera), With<RenderPhase<VignetteRenderPhase>>>,
+) {
+    for (entity, camera) in &views {
+        let view = camera
+            .target
+            .get_texture_view(&*windows, &images)
+            .expect("The vignette camera should have a texture view");
+
+        commands.entity(entity).insert(ViewVignetteBindings {
+            // texture: todo!(),
+            view: view.clone(),
+        });
+    }
+}
+
+#[derive(Component)]
 struct VignetteBindGroup {
     bind_group: BindGroup,
 }
@@ -256,6 +282,12 @@ impl Default for VignetteUniform {
     }
 }
 
+#[derive(Debug, Component)]
+struct ViewVignetteBindings {
+    // pub texture: Texture,
+    pub view: TextureView,
+}
+
 fn queue_vignette_bind_group(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
@@ -263,32 +295,44 @@ fn queue_vignette_bind_group(
     globals_buffer: Res<GlobalsBuffer>,
     view_uniforms: Res<ViewUniforms>,
     vignette_uniforms: Res<ComponentUniforms<VignetteUniform>>,
+    views: Query<(Entity, &ViewVignetteBindings)>,
 ) {
     if let (Some(globals_binding), Some(view_binding), Some(vignette_binding)) = (
         globals_buffer.buffer.binding(),
         view_uniforms.uniforms.binding(),
         vignette_uniforms.binding(),
     ) {
-        let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Vignette BindGroupDescriptor"),
-            layout: &vignette_pipeline.layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: globals_binding.clone(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: view_binding.clone(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: vignette_binding.clone(),
-                },
-            ],
-        });
-
-        commands.insert_resource(VignetteBindGroup { bind_group });
+        for (entity, view_vignette_bindings) in &views {
+            let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Vignette BindGroupDescriptor"),
+                layout: &vignette_pipeline.layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: globals_binding.clone(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: view_binding.clone(),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: vignette_binding.clone(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: BindingResource::TextureView(&view_vignette_bindings.view),
+                    },
+                    BindGroupEntry {
+                        binding: 4,
+                        resource: BindingResource::Sampler(&vignette_pipeline.sampler),
+                    },
+                ],
+            });
+            commands
+                .entity(entity)
+                .insert(VignetteBindGroup { bind_group });
+        }
     }
 }
 
@@ -327,6 +371,8 @@ fn extract_vignette_cameras(
             continue;
         }
 
+        // let view = camera.target.get_texture_view(windows, images)
+
         commands
             .get_or_spawn(entity)
             .insert(VignetteUniform::from(vignette.clone()))
@@ -343,15 +389,18 @@ type VignetteDrawFunctions = (
 struct SetVignetteBindGroup<const I: usize>();
 
 impl<const I: usize> EntityRenderCommand for SetVignetteBindGroup<I> {
-    type Param = SRes<VignetteBindGroup>;
+    type Param = SQuery<Read<VignetteBindGroup>>;
 
     fn render<'w>(
-        _view: Entity,
+        view: Entity,
         _item: Entity,
         bind_group: bevy::ecs::system::SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let bind_group = &bind_group.into_inner().bind_group;
+        let bind_group = &bind_group
+            .get_inner(view)
+            .expect("Entity and component should exist")
+            .bind_group;
         pass.set_bind_group(I, bind_group, &[]);
 
         RenderCommandResult::Success
@@ -389,6 +438,7 @@ impl EntityRenderCommand for DrawVignetteVertices {
 struct VignettePipeline {
     layout: BindGroupLayout,
     shader: Handle<Shader>,
+    sampler: Sampler,
 }
 
 impl FromWorld for VignettePipeline {
@@ -400,7 +450,7 @@ impl FromWorld for VignettePipeline {
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -410,7 +460,7 @@ impl FromWorld for VignettePipeline {
                 },
                 BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -420,12 +470,32 @@ impl FromWorld for VignettePipeline {
                 },
                 BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: Some(VignetteUniform::min_size()),
                     },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float {
+                            // Should we be able to use a filtering sampler?
+                            filterable: true,
+                        },
+                        view_dimension: TextureViewDimension::D2,
+                        // Does this depend on MSAA?
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -434,7 +504,27 @@ impl FromWorld for VignettePipeline {
         let asset_server = world.resource::<AssetServer>();
         let shader = asset_server.load("shaders/vignette.wgsl");
 
-        Self { shader, layout }
+        // Right now the descriptor is the same as what [`ShadowPipeline`] does.
+        // Customize as need arises.
+        // UPDATE: Changed to filtering, with no comparison
+        let sampler = render_device.create_sampler(&SamplerDescriptor {
+            label: Some("VignetteSampler"),
+            address_mode_u: ClampToEdge,
+            address_mode_v: ClampToEdge,
+            address_mode_w: ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            mipmap_filter: FilterMode::Nearest,
+            // compare: Some(CompareFunction::GreaterEqual),
+            compare: None,
+            ..Default::default()
+        });
+
+        Self {
+            shader,
+            layout,
+            sampler,
+        }
     }
 }
 
@@ -467,6 +557,7 @@ impl Plugin for VignettePlugin {
             .add_render_command::<VignetteRenderPhase, VignetteDrawFunctions>()
             .add_system_to_stage(RenderStage::Extract, extract_vignette_cameras)
             .add_system_to_stage(RenderStage::Prepare, prepare_vignette_quad)
+            .add_system_to_stage(RenderStage::Prepare, prepare_vignette_view_bindings)
             .add_system_to_stage(RenderStage::Queue, queue_vignette_bind_group)
             .add_system_to_stage(RenderStage::Queue, queue_vignette_phase_items)
             .add_system_to_stage(
