@@ -9,12 +9,22 @@ use core::f32::consts::PI;
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
 
+#[derive(Debug, Resource)]
+pub struct ExampleText(pub String);
+
+impl Default for ExampleText {
+    fn default() -> Self {
+        Self("Hello World".into())
+    }
+}
+
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(AssetServerSettings {
             watch_for_changes: true,
             ..default()
         })
+        .init_resource::<ExampleText>()
         .add_plugins(DefaultPlugins)
         .add_system(bevy::window::close_on_esc);
     }
@@ -258,8 +268,14 @@ mod ui {
             .insert(FpsText);
     }
 
-    pub(crate) fn text_color_system(time: Res<Time>, mut query: Query<&mut Text, With<ColorText>>) {
+    pub(crate) fn text_color_system(
+        time: Res<Time>,
+        message: Res<ExampleText>,
+        mut query: Query<&mut Text, With<ColorText>>,
+    ) {
         for mut text in &mut query {
+            text.sections[0].value = message.0.clone();
+
             let seconds = time.seconds_since_startup() as f32;
 
             // Update the color of the first and only section.

@@ -31,8 +31,6 @@ impl FromWorld for BevyVfxBagImage {
             ..default()
         };
 
-        dbg!(&size);
-
         let mut image = Image {
             texture_descriptor: TextureDescriptor {
                 label: Some("BevyVfxBag Main Image"),

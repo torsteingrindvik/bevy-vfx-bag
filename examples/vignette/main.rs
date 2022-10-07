@@ -26,14 +26,17 @@ fn main() {
 
 fn vignette_startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
     // Normal camera spawn
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 6., 12.0).looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
-        camera: Camera {
-            target: RenderTarget::Image(image_handle.clone()),
+    commands
+        .spawn(Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 6., 12.0)
+                .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
+            camera: Camera {
+                target: RenderTarget::Image(image_handle.clone()),
+                ..default()
+            },
             ..default()
-        },
-        ..default()
-    });
+        })
+        .insert(UiCameraConfig { show_ui: false });
     // Adds effect to this camera
     // .insert(Vignette::default());
 }

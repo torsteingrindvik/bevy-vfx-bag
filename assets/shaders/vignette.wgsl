@@ -20,7 +20,11 @@ fn fragment(
     //  (1.0, 1.0)
 
 
-    let uv = coords_to_viewport_uv(position.xy, view.viewport);
+    let uv_original = coords_to_viewport_uv(position.xy, view.viewport);
+    // uv.x = 0.0 - uv.x;
+    // uv.x *= 1.0;
+    let uv = vec2<f32>(1.0 - uv_original.x, uv_original.y);
+    let uv = vec2<f32>(uv_original.x, uv_original.y);
 
     var output_color = vec4<f32>(textureSample(texture, our_sampler, uv).rgb, 1.0);
 
