@@ -7,8 +7,6 @@ edition = "2021"
 bevy = { path = "../bevy" }
 bytemuck = "1.12.1"
 
-# bevy_mod_debugdump = "0.5.0"
-
 [profile.dev]
 opt-level = 1
 

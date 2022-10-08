@@ -1,7 +1,7 @@
 use bevy::{
     prelude::*,
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef},
+    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
 };
 
@@ -9,12 +9,12 @@ use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
 
 /// This plugin allows adding a vignette effect to a given camera.
 /// Add this plugin to the [`App`] in order to use it.
-/// Then, add the [`Vignette`] component to the camera you want the effect to apply to.
+/// Then, use the [`Vignette`] resource to control the effect.
 pub struct VignettePlugin;
 
-/// This component enables a vignette effect on the camera it is insert onto.
+/// This resource controls the parameters of the effect.
 /// Assumes the [`VignettePlugin`] has been added to the [`App`].
-#[derive(Debug, Component, Clone)]
+#[derive(Debug, Resource, Clone, ShaderType)]
 pub struct Vignette {
     /// The radius of the effect.
     /// A radius of 1.0 will cover the entire screen (in both axes).
@@ -60,6 +60,9 @@ struct VignetteMaterial {
     #[texture(0)]
     #[sampler(1)]
     source_image: Handle<Image>,
+
+    #[uniform(2)]
+    vignette: Vignette,
 }
 
 impl Material2d for VignetteMaterial {
@@ -74,6 +77,7 @@ fn setup(
     mut vignette_materials: ResMut<Assets<VignetteMaterial>>,
     image_handle: Res<BevyVfxBagImage>,
     render_layer: Res<BevyVfxBagRenderLayer>,
+    vignette: Res<Vignette>,
     images: Res<Assets<Image>>,
 ) {
     let image = images
@@ -88,6 +92,7 @@ fn setup(
 
     let material_handle = vignette_materials.add(VignetteMaterial {
         source_image: image_handle.clone(),
+        vignette: vignette.clone(),
     });
 
     // Post processing 2d quad, with material using the render texture done by the main camera, with a custom shader.
@@ -105,9 +110,24 @@ fn setup(
     ));
 }
 
+fn update_vignette(
+    mut vignette_materials: ResMut<Assets<VignetteMaterial>>,
+    vignette: Res<Vignette>,
+) {
+    if !vignette.is_changed() {
+        return;
+    }
+
+    for (_, material) in vignette_materials.iter_mut() {
+        material.vignette = vignette.clone();
+    }
+}
+
 impl Plugin for VignettePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_plugin(Material2dPlugin::<VignetteMaterial>::default())
-            .add_startup_system(setup);
+        app.init_resource::<Vignette>()
+            .add_plugin(Material2dPlugin::<VignetteMaterial>::default())
+            .add_startup_system(setup)
+            .add_system(update_vignette);
     }
 }

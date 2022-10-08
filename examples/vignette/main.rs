@@ -17,14 +17,13 @@ fn main() {
         .add_plugin(BevyVfxBagPlugin)
         // Add required plugin for using vignette
         .add_plugin(VignettePlugin)
-        // In order to mark a camera with the effect
-        .add_startup_system(vignette_startup)
+        .add_startup_system(startup)
         // Shows how to change the effect at runtime
-        // .add_system(vignette_config)
+        .add_system(update)
         .run();
 }
 
-fn vignette_startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
+fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
     // Normal camera spawn
     commands
         .spawn(Camera3dBundle {
@@ -37,17 +36,22 @@ fn vignette_startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) 
             ..default()
         })
         .insert(UiCameraConfig { show_ui: false });
-    // Adds effect to this camera
-    // .insert(Vignette::default());
 }
 
-// fn vignette_config(mut vignette: Query<&mut Vignette>, time: Res<Time>) {
-//     for mut vignette in &mut vignette {
-//         // (0.0 -> 2.0)
-//         let mut feathering = time.seconds_since_startup().sin() as f32 + 1.0;
-//         // (0.0 -> 0.5)
-//         feathering /= 4.0;
+fn update(
+    mut vignette: ResMut<Vignette>,
+    time: Res<Time>,
+    mut text: ResMut<examples_common::ExampleText>,
+) {
+    // (0.0 -> 2.0)
+    let mut feathering = time.seconds_since_startup().sin() as f32 + 1.0;
+    // (0.0 -> 0.5)
+    feathering /= 4.0;
 
-//         vignette.feathering = feathering;
-//     }
-// }
+    vignette.feathering = feathering;
+
+    text.0 = format!(
+        "Radius: {:.1?}, Feathering: {:.1?}",
+        vignette.radius, feathering
+    );
+}

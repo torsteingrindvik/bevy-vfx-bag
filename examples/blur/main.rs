@@ -33,12 +33,32 @@ fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
         .insert(UiCameraConfig { show_ui: false });
 }
 
-fn update(time: Res<Time>, mut blur: ResMut<Blur>, mut text: ResMut<examples_common::ExampleText>) {
-    blur.amount = ((time.seconds_since_startup().sin() + 1.0) / 2.) as f32;
+fn update(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut blur: ResMut<Blur>,
+    mut text: ResMut<examples_common::ExampleText>,
+) {
+    let mut blur_diff = 0.0;
+    let mut radius_diff = 0.0;
+
+    if keyboard_input.just_pressed(KeyCode::Left) {
+        blur_diff = -0.1;
+    } else if keyboard_input.just_pressed(KeyCode::Right) {
+        blur_diff = 0.1;
+    }
+
+    if keyboard_input.just_pressed(KeyCode::Up) {
+        radius_diff = 0.001;
+    } else if keyboard_input.just_pressed(KeyCode::Down) {
+        radius_diff = -0.001;
+    }
+
+    blur.amount += blur_diff;
+    blur.kernel_radius += radius_diff;
 
     // Display blur amount on screen
     text.0 = format!(
-        "Blur: {:.2?}, radius: {:.2?}",
+        "(Press ←↑→↓) Blur: {:.2?}, radius: {:.3?}",
         blur.amount, blur.kernel_radius
     );
 }
