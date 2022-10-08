@@ -11,7 +11,7 @@ use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
 /// Add this plugin to the [`App`] in order to use it.
 pub struct FlipPlugin;
 
-/// Which way to flip the scene.
+/// Which way to flip the texture.
 #[derive(Debug, Default, Copy, Clone, Resource)]
 pub enum Flip {
     /// Don't flip.

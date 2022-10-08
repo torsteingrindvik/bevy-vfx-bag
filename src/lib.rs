@@ -1,6 +1,6 @@
 #![deny(clippy::unwrap_used)]
 #![deny(missing_docs)]
-
+#![doc = include_str!("../README.md")]
 //! This crate allows you to add grapical effects to your Bevy applications.
 
 use bevy::prelude::{App, *};
@@ -16,7 +16,7 @@ pub mod image;
 
 /// This resource holds the image handle of the image which will be used for
 /// sampling before applying effects.
-/// Typically, the [`RenderTarget`] of the camera that wants post processing
+/// Typically, the [`bevy::render::camera::RenderTarget`] of the camera that wants post processing
 /// should use this.
 #[derive(Debug, Resource)]
 pub struct BevyVfxBagImage(Handle<Image>);

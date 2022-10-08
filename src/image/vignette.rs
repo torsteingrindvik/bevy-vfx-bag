@@ -7,13 +7,10 @@ use bevy::{
 
 use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
 
-/// This plugin allows adding a vignette effect to a given camera.
-/// Add this plugin to the [`App`] in order to use it.
-/// Then, use the [`Vignette`] resource to control the effect.
+/// This plugin allows adding a vignette effect to a texture.
 pub struct VignettePlugin;
 
 /// This resource controls the parameters of the effect.
-/// Assumes the [`VignettePlugin`] has been added to the [`App`].
 #[derive(Debug, Resource, Clone, ShaderType)]
 pub struct Vignette {
     /// The radius of the effect.

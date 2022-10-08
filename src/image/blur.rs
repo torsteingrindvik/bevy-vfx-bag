@@ -11,7 +11,7 @@ use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
 /// Add this plugin to the [`App`] in order to use it.
 pub struct BlurPlugin;
 
-/// How much to blur.
+/// Blur parameters.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Blur {
     /// How blurry the output image should be.
@@ -21,7 +21,7 @@ pub struct Blur {
 
     /// How far away the blur should sample points away from the origin point
     /// when blurring.
-    /// This is in UV coordinates, so small (positive) values are expected.
+    /// This is in UV coordinates, so small (positive) values are expected (`0.01` is a good start).
     pub kernel_radius: f32,
 }
 
