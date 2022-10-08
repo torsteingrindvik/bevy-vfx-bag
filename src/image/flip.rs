@@ -37,25 +37,14 @@ impl From<Flip> for FlipUniform {
             Flip::HorizontalVertical => [1.0, 1.0],
         };
 
-        // Self { uv }
         Self { x: uv[0], y: uv[1] }
     }
 }
 
-// impl From<Flip> for Color {
-//     fn from(flip: Flip) -> Self {
-//         let as_uniform: FlipUniform = flip.into();
-
-//         Self::rgba(as_uniform.uv[0], as_uniform.uv[1], 0.0, 0.0)
-//     }
-// }
-
 #[derive(Debug, Clone, ShaderType)]
 struct FlipUniform {
-    // uv: [f32; 2],
-    // uv: [f32; 2],
     x: f32,
-    y: f32, // color: vec4<f32>,
+    y: f32,
 }
 
 #[derive(Debug, AsBindGroup, TypeUuid, Clone)]
@@ -67,7 +56,6 @@ struct FlipMaterial {
 
     #[uniform(2)]
     flip: FlipUniform,
-    // flip: Color,
 }
 
 impl Material2d for FlipMaterial {

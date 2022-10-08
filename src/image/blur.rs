@@ -14,8 +14,9 @@ pub struct BlurPlugin;
 /// How much to blur.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Blur {
-    /// How blurry.
-    /// TODO: Range docs
+    /// How blurry the output image should be.
+    /// If `0.0`, no blur is applied.
+    /// `1.0` is "fully blurred", but higher values will produce interesting results.
     pub amount: f32,
 
     /// How far away the blur should sample points away from the origin point

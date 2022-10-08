@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use bevy::render::camera::RenderTarget;
 use bevy::time::FixedTimestep;
-use bevy_vfx_bag::camera::flip::{Flip, FlipPlugin};
+use bevy_vfx_bag::image::flip::{Flip, FlipPlugin};
 use bevy_vfx_bag::{BevyVfxBagImage, BevyVfxBagPlugin};
 
 fn main() {

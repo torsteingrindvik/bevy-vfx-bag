@@ -21,7 +21,6 @@ fn s(uv: vec2<f32>) -> vec3<f32> {
 
 fn p(x: f32, y: f32) -> vec2<f32> {
     return vec2<f32>(x, y) * blur.kernel_radius;
-    // return vec2<f32>(x, y) * 0.05;
 }
 
 fn s_blurred(uv: vec2<f32>) -> vec3<f32> {

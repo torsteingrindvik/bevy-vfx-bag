@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy::render::camera::RenderTarget;
-use bevy_vfx_bag::camera::blur::{Blur, BlurPlugin};
+use bevy_vfx_bag::image::blur::{Blur, BlurPlugin};
 use bevy_vfx_bag::{BevyVfxBagImage, BevyVfxBagPlugin};
 
 fn main() {

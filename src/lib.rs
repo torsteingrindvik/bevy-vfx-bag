@@ -10,13 +10,14 @@ use bevy::render::render_resource::{
 use bevy::render::texture::BevyDefault;
 use bevy::render::view::RenderLayers;
 
-/// Effects which are added to cameras.
-pub mod camera;
+/// Effects which are added to an image.
+/// This image might be the output of a render pass of an app.
+pub mod image;
 
-// mod nodes;
-// mod quad;
-
-/// Hi
+/// This resource holds the image handle of the image which will be used for
+/// sampling before applying effects.
+/// Typically, the [`RenderTarget`] of the camera that wants post processing
+/// should use this.
 #[derive(Debug, Resource)]
 pub struct BevyVfxBagImage(Handle<Image>);
 
@@ -61,7 +62,8 @@ impl std::ops::Deref for BevyVfxBagImage {
     }
 }
 
-/// TODO
+/// The base plugin which sets up base resources and
+/// systems which other plugins in this crate rely on.
 pub struct BevyVfxBagPlugin;
 
 /// The render layer post processing effects are rendered to.
