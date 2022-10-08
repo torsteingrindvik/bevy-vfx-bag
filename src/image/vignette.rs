@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
+use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
 
 /// This plugin allows adding a vignette effect to a texture.
 pub struct VignettePlugin;
@@ -104,6 +104,7 @@ fn setup(
             ..default()
         },
         render_layer.0,
+        ShouldResize,
     ));
 }
 

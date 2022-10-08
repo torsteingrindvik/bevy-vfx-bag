@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
+use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
 
 /// This plugin allows blurring the scene.
 /// Add this plugin to the [`App`] in order to use it.
@@ -87,6 +87,7 @@ fn setup(
             ..default()
         },
         render_layer.0,
+        ShouldResize,
     ));
 
     debug!("OK");

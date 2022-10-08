@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer};
+use crate::{quad::window_sized_quad, BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
 
 /// This plugin allows flipping the rendered scene horizontally and/or vertically.
 /// Add this plugin to the [`App`] in order to use it.
@@ -52,7 +52,7 @@ struct FlipUniform {
 struct FlipMaterial {
     #[texture(0)]
     #[sampler(1)]
-    source_image: Handle<Image>,
+    source_image: Option<Handle<Image>>,
 
     #[uniform(2)]
     flip: FlipUniform,
@@ -71,28 +71,21 @@ fn setup(
     image_handle: Res<BevyVfxBagImage>,
     render_layer: Res<BevyVfxBagRenderLayer>,
     flip: Res<Flip>,
-    images: Res<Assets<Image>>,
+    windows: Res<Windows>,
 ) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
-
-    let extent = image.texture_descriptor.size;
-
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = flip_materials.add(FlipMaterial {
-        source_image: image_handle.clone(),
+    let flip_material = FlipMaterial {
+        source_image: Some(image_handle.clone()),
         flip: (*flip).into(),
-    });
+    };
+
+    let material_handle = flip_materials.add(flip_material);
+
+    let mesh = window_sized_quad(windows.primary());
 
     // Post processing 2d quad, with material using the render texture done by the main camera, with a custom shader.
     commands.spawn((
         MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
+            mesh: meshes.add(mesh).into(),
             material: material_handle,
             transform: Transform {
                 translation: Vec3::new(0.0, 0.0, 1.5),
@@ -101,9 +94,8 @@ fn setup(
             ..default()
         },
         render_layer.0,
+        ShouldResize,
     ));
-
-    debug!("OK");
 }
 
 fn update_flip(mut flip_materials: ResMut<Assets<FlipMaterial>>, flip: Res<Flip>) {

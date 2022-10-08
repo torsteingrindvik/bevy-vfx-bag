@@ -1,5 +1,6 @@
-#![deny(clippy::unwrap_used)]
-#![deny(missing_docs)]
+#![allow(clippy::too_many_arguments)] // Bevy fns tend to have many args.
+#![deny(clippy::unwrap_used)] // Let's try to explain invariants when we unwrap (so use expect).
+#![deny(missing_docs)] // Let's try to have good habits.
 #![doc = include_str!("../README.md")]
 //! This crate allows you to add grapical effects to your Bevy applications.
 
@@ -9,10 +10,17 @@ use bevy::render::render_resource::{
 };
 use bevy::render::texture::BevyDefault;
 use bevy::render::view::RenderLayers;
+use bevy::sprite::Mesh2dHandle;
+use bevy::window::WindowResized;
+
+use crate::quad::window_sized_quad;
 
 /// Effects which are added to an image.
 /// This image might be the output of a render pass of an app.
 pub mod image;
+
+/// Helpers for making quads.
+pub mod quad;
 
 /// This resource holds the image handle of the image which will be used for
 /// sampling before applying effects.
@@ -21,36 +29,49 @@ pub mod image;
 #[derive(Debug, Resource)]
 pub struct BevyVfxBagImage(Handle<Image>);
 
+#[derive(Debug, Component)]
+pub(crate) struct ShouldResize;
+
+fn make_image(width: u32, height: u32) -> Image {
+    let size = Extent3d {
+        width,
+        height,
+        ..default()
+    };
+
+    let mut image = Image {
+        texture_descriptor: TextureDescriptor {
+            label: Some("BevyVfxBag Main Image"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::bevy_default(),
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+        },
+        ..default()
+    };
+    image.resize(size);
+    image
+}
+
 impl FromWorld for BevyVfxBagImage {
     fn from_world(world: &mut World) -> Self {
-        let windows = world.resource::<Windows>();
+        let (width, height) = {
+            let windows = world.resource::<Windows>();
+            let primary = windows.get_primary().expect("Should have primary window");
 
-        let window = windows.primary();
-        let size = Extent3d {
-            width: window.physical_width(),
-            height: window.physical_height(),
-            ..default()
+            (primary.physical_width(), primary.physical_height())
         };
 
-        let mut image = Image {
-            texture_descriptor: TextureDescriptor {
-                label: Some("BevyVfxBag Main Image"),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::bevy_default(),
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-            },
-            ..default()
-        };
-        image.resize(size);
+        let mut image_assets = world.resource_mut::<Assets<Image>>();
 
-        let mut images = world.resource_mut::<Assets<Image>>();
+        let image = make_image(width, height);
+        let image_handle = image_assets.add(image);
 
-        Self(images.add(image))
+        Self(image_handle)
     }
 }
 
@@ -105,11 +126,35 @@ fn setup(
     ));
 }
 
+fn update(
+    windows: Res<Windows>,
+    mut resize_reader: EventReader<WindowResized>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
+    needs_new_quad: Query<&Mesh2dHandle, With<ShouldResize>>,
+) {
+    let main_window_id = windows.get_primary().expect("Should have window").id();
+
+    for event in resize_reader.iter() {
+        if event.id != main_window_id {
+            continue;
+        }
+
+        let window = windows.get(event.id).expect("Main window should exist");
+
+        for resize_me in &needs_new_quad {
+            let mesh = window_sized_quad(window);
+
+            *mesh_assets.get_mut(&resize_me.0).expect("Should find mesh") = mesh;
+        }
+    }
+}
+
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BevyVfxBagImage>()
             .init_resource::<BevyVfxBagRenderLayer>()
             .init_resource::<BevyVfxBagPriority>()
-            .add_startup_system(setup);
+            .add_startup_system(setup)
+            .add_system(update);
     }
 }

@@ -6,3 +6,6 @@ pub mod flip;
 
 /// A blur effect.
 pub mod blur;
+
+/// A raindrops effect.
+pub mod rainrops;
