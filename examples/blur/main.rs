@@ -4,27 +4,22 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy::render::camera::RenderTarget;
-use bevy_vfx_bag::image::vignette::{Vignette, VignettePlugin};
+use bevy_vfx_bag::image::blur::{Blur, BlurPlugin};
 use bevy_vfx_bag::{BevyVfxBagImage, BevyVfxBagPlugin};
 
 fn main() {
     let mut app = App::new();
 
-    // Set up the base example
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        // Add required plugin for using any effect at all
         .add_plugin(BevyVfxBagPlugin)
-        // Add required plugin for using vignette
-        .add_plugin(VignettePlugin)
+        .add_plugin(BlurPlugin)
         .add_startup_system(startup)
-        // Shows how to change the effect at runtime
         .add_system(update)
         .run();
 }
 
 fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
-    // Normal camera spawn
     commands
         .spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
@@ -39,19 +34,31 @@ fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
 }
 
 fn update(
-    mut vignette: ResMut<Vignette>,
-    time: Res<Time>,
+    keyboard_input: Res<Input<KeyCode>>,
+    mut blur: ResMut<Blur>,
     mut text: ResMut<examples_common::ExampleText>,
 ) {
-    // (0.0 -> 2.0)
-    let mut feathering = time.seconds_since_startup().sin() as f32 + 1.0;
-    // (0.0 -> 0.5)
-    feathering /= 4.0;
+    let mut blur_diff = 0.0;
+    let mut radius_diff = 0.0;
 
-    vignette.feathering = feathering;
+    if keyboard_input.just_pressed(KeyCode::Left) {
+        blur_diff = -0.1;
+    } else if keyboard_input.just_pressed(KeyCode::Right) {
+        blur_diff = 0.1;
+    }
 
+    if keyboard_input.just_pressed(KeyCode::Up) {
+        radius_diff = 0.001;
+    } else if keyboard_input.just_pressed(KeyCode::Down) {
+        radius_diff = -0.001;
+    }
+
+    blur.amount += blur_diff;
+    blur.kernel_radius += radius_diff;
+
+    // Display blur amount on screen
     text.0 = format!(
-        "Radius: {:.1?}, Feathering: {:.1?}",
-        vignette.radius, feathering
+        "(Press ←↑→↓) Blur: {:.2?}, radius: {:.3?}",
+        blur.amount, blur.kernel_radius
     );
 }

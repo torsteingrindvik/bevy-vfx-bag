@@ -4,27 +4,30 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy::render::camera::RenderTarget;
-use bevy_vfx_bag::image::vignette::{Vignette, VignettePlugin};
+use bevy::time::FixedTimestep;
+use bevy_vfx_bag::image::flip::{Flip, FlipPlugin};
 use bevy_vfx_bag::{BevyVfxBagImage, BevyVfxBagPlugin};
 
 fn main() {
     let mut app = App::new();
 
-    // Set up the base example
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        // Add required plugin for using any effect at all
         .add_plugin(BevyVfxBagPlugin)
-        // Add required plugin for using vignette
-        .add_plugin(VignettePlugin)
+        // The [`FlipPlugin`] will insert a default [`Flip::None`] unless
+        // you insert one before the plugin, like this.
+        .insert_resource(Flip::Horizontal)
+        .add_plugin(FlipPlugin)
         .add_startup_system(startup)
-        // Shows how to change the effect at runtime
-        .add_system(update)
+        .add_system_set(
+            SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(1.0))
+                .with_system(update),
+        )
         .run();
 }
 
 fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
-    // Normal camera spawn
     commands
         .spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
@@ -38,20 +41,15 @@ fn startup(mut commands: Commands, image_handle: Res<BevyVfxBagImage>) {
         .insert(UiCameraConfig { show_ui: false });
 }
 
-fn update(
-    mut vignette: ResMut<Vignette>,
-    time: Res<Time>,
-    mut text: ResMut<examples_common::ExampleText>,
-) {
-    // (0.0 -> 2.0)
-    let mut feathering = time.seconds_since_startup().sin() as f32 + 1.0;
-    // (0.0 -> 0.5)
-    feathering /= 4.0;
+// Switch flip modes every second.
+fn update(mut flip: ResMut<Flip>, mut text: ResMut<examples_common::ExampleText>) {
+    *flip = match *flip {
+        Flip::None => Flip::Horizontal,
+        Flip::Horizontal => Flip::Vertical,
+        Flip::Vertical => Flip::HorizontalVertical,
+        Flip::HorizontalVertical => Flip::None,
+    };
 
-    vignette.feathering = feathering;
-
-    text.0 = format!(
-        "Radius: {:.1?}, Feathering: {:.1?}",
-        vignette.radius, feathering
-    );
+    // Display on screen which mode we are in
+    text.0 = format!("{:?}", *flip);
 }

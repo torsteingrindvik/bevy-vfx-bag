@@ -2,12 +2,21 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use core::f32::consts::PI;
 
-/// Adds some "sane defaults":
+/// Adds some "sane defaults" for showing examples/development:
 ///
 /// * The default Bevy plugins
 /// * Hot reloading
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
+
+#[derive(Debug, Resource)]
+pub struct ExampleText(pub String);
+
+impl Default for ExampleText {
+    fn default() -> Self {
+        Self("Hello World".into())
+    }
+}
 
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
@@ -15,6 +24,7 @@ impl Plugin for SaneDefaultsPlugin {
             watch_for_changes: true,
             ..default()
         })
+        .init_resource::<ExampleText>()
         .add_plugins(DefaultPlugins)
         .add_system(bevy::window::close_on_esc);
     }
@@ -56,8 +66,8 @@ impl Plugin for ShapesExamplePlugin {
             .add_startup_system(shapes::setup)
             .add_startup_system(ui::setup)
             .add_system(shapes::rotate)
-            .add_system(ui::text_update_system)
-            .add_system(ui::text_color_system);
+            .add_system(ui::fps_text_update)
+            .add_system(ui::ui_text_update);
     }
 }
 
@@ -197,9 +207,9 @@ mod ui {
     #[derive(Component)]
     pub(crate) struct FpsText;
 
-    // A unit struct to help identify the color-changing Text component
+    // A unit struct to help identify the example UI text component
     #[derive(Component)]
-    pub(crate) struct ColorText;
+    pub(crate) struct UiText;
 
     pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         // UI camera
@@ -213,7 +223,7 @@ mod ui {
                     "hello\nbevy!",
                     TextStyle {
                         font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 100.0,
+                        font_size: 60.0,
                         color: Color::WHITE,
                     },
                 ) // Set the alignment of the Text
@@ -230,7 +240,7 @@ mod ui {
                     ..default()
                 }),
             )
-            .insert(ColorText);
+            .insert(UiText);
         // Text with multiple sections
         commands
             .spawn(
@@ -258,21 +268,16 @@ mod ui {
             .insert(FpsText);
     }
 
-    pub(crate) fn text_color_system(time: Res<Time>, mut query: Query<&mut Text, With<ColorText>>) {
+    pub(crate) fn ui_text_update(
+        message: Res<ExampleText>,
+        mut query: Query<&mut Text, With<UiText>>,
+    ) {
         for mut text in &mut query {
-            let seconds = time.seconds_since_startup() as f32;
-
-            // Update the color of the first and only section.
-            text.sections[0].style.color = Color::Rgba {
-                red: (1.25 * seconds).sin() / 2.0 + 0.5,
-                green: (0.75 * seconds).sin() / 2.0 + 0.5,
-                blue: (0.50 * seconds).sin() / 2.0 + 0.5,
-                alpha: 1.0,
-            };
+            text.sections[0].value = message.0.clone();
         }
     }
 
-    pub(crate) fn text_update_system(
+    pub(crate) fn fps_text_update(
         diagnostics: Res<Diagnostics>,
         mut query: Query<&mut Text, With<FpsText>>,
     ) {
