@@ -20,6 +20,13 @@ struct Raindrops {
 @group(1) @binding(4)
 var<uniform> raindrops: Raindrops;
 
+// Remap the r, g, a channels to (-1, 1) range.
+fn rga_normalize(
+    rga: vec3<f32>
+) -> vec3<f32> {
+    return (rga * 2.) - 1.; 
+}
+
 @fragment
 fn fragment(
     @builtin(position) position: vec4<f32>,
@@ -31,5 +38,10 @@ fn fragment(
     // Make aspect-ratio independent UV coords.
     let uv = vec2<f32>(uv_orig.x * view.viewport.z / view.viewport.w, uv_orig.y);
 
-    return vec4<f32>(textureSample(texture_raindrops, sampler_raindrops, uv).rgba);
+    let uv = uv * 1.8;
+
+    let t = textureSample(texture_raindrops, sampler_raindrops, uv).rgba;
+    let rga_norm = rga_normalize(t.rga);
+
+    return vec4<f32>(vec3<f32>(rga_norm.b), 1.0);
 }

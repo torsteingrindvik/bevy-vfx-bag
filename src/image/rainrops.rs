@@ -5,7 +5,10 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::{
-        render_resource::{AddressMode, AsBindGroup, SamplerDescriptor, ShaderRef, ShaderType},
+        render_resource::{
+            AddressMode, AsBindGroup, SamplerDescriptor, ShaderRef, ShaderType, TextureFormat,
+            TextureViewDescriptor, TextureViewDimension,
+        },
         texture::ImageSampler,
     },
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
@@ -150,6 +153,16 @@ fn fixup_texture(
                     address_mode_u: AddressMode::Repeat,
                     address_mode_v: AddressMode::Repeat,
                     address_mode_w: AddressMode::Repeat,
+                    ..default()
+                });
+
+                let format = TextureFormat::Rgba8Unorm;
+                image.texture_descriptor.format = format;
+
+                image.texture_view_descriptor = Some(TextureViewDescriptor {
+                    label: Some("Raindrops TextureViewDescriptor"),
+                    format: Some(format),
+                    dimension: Some(TextureViewDimension::D2),
                     ..default()
                 });
 
