@@ -223,7 +223,7 @@ mod ui {
                     "hello\nbevy!",
                     TextStyle {
                         font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 60.0,
+                        font_size: 40.0,
                         color: Color::WHITE,
                     },
                 ) // Set the alignment of the Text
@@ -250,13 +250,13 @@ mod ui {
                         "FPS: ",
                         TextStyle {
                             font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                            font_size: 60.0,
+                            font_size: 40.0,
                             color: Color::WHITE,
                         },
                     ),
                     TextSection::from_style(TextStyle {
                         font: asset_server.load("fonts/FiraMono-Medium.ttf"),
-                        font_size: 60.0,
+                        font_size: 40.0,
                         color: Color::GOLD,
                     }),
                 ])

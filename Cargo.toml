@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { path = "../bevy" }
+bevy = { path = "../bevy", features = ["tga"] }
 bytemuck = "1.12.1"
 
 [profile.dev]
