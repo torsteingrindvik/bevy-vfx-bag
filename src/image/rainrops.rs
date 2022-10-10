@@ -22,13 +22,24 @@ pub struct RaindropsPlugin;
 /// Blur parameters.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Raindrops {
-    /// Todo
-    pub hmm: f32,
+    /// How fast the drops animate on screen.
+    /// The default scaling allows for a gentle pitter-patter.
+    pub time_scaling: f32,
+
+    /// How much displacement each droplet has.
+    pub intensity: f32,
+
+    /// The overall size of the droplets.
+    pub zoom: f32,
 }
 
 impl Default for Raindrops {
     fn default() -> Self {
-        Self { hmm: 1.0 }
+        Self {
+            time_scaling: 0.8,
+            intensity: 0.03,
+            zoom: 1.0,
+        }
     }
 }
 
