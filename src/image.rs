@@ -9,3 +9,6 @@ pub mod blur;
 
 /// A raindrops effect.
 pub mod rainrops;
+
+/// A wave effect.
+pub mod wave;
