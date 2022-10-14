@@ -41,6 +41,18 @@ fn update(
     mut text: ResMut<examples_common::ExampleText>,
     keyboard_input: Res<Input<KeyCode>>,
 ) {
+    let mut magnitude = chromatic_aberration.magnitude_r;
+
+    if keyboard_input.just_pressed(KeyCode::Up) {
+        magnitude += 0.001;
+    } else if keyboard_input.just_pressed(KeyCode::Down) {
+        magnitude -= 0.001;
+    }
+
+    chromatic_aberration.magnitude_r = magnitude;
+    chromatic_aberration.magnitude_g = magnitude;
+    chromatic_aberration.magnitude_b = magnitude;
+
     let t = time.seconds_since_startup_wrapped_f32();
 
     chromatic_aberration.dir_r = Vec2::from_angle(t);
@@ -51,7 +63,7 @@ fn update(
     let angle = |color_dir| base_angle.angle_between(color_dir) * 180. / PI + 180.;
 
     text.0 = format!(
-        "R: {:4.0?}° G: {:4.0?}° B: {:4.0?}°",
+        "(Press ↑↓) Magnitude all: {magnitude:.3?}, R: {:4.0?}° G: {:4.0?}° B: {:4.0?}°",
         angle(chromatic_aberration.dir_r),
         angle(chromatic_aberration.dir_g),
         angle(chromatic_aberration.dir_b)
