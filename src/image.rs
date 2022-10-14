@@ -12,3 +12,6 @@ pub mod rainrops;
 
 /// A wave effect.
 pub mod wave;
+
+/// Chromatic aberration.
+pub mod chromatic_aberration;
