@@ -113,7 +113,6 @@ fn setup(
     debug!("OK");
 }
 
-// TODO: Normalize
 fn update_chromatic_aberration(
     mut chromatic_aberration_materials: ResMut<Assets<ChromaticAberrationMaterial>>,
     chromatic_aberration: Res<ChromaticAberration>,
@@ -122,8 +121,14 @@ fn update_chromatic_aberration(
         return;
     }
 
+    let mut ca = *chromatic_aberration;
+
+    ca.dir_r = ca.dir_r.normalize_or_zero();
+    ca.dir_g = ca.dir_g.normalize_or_zero();
+    ca.dir_b = ca.dir_b.normalize_or_zero();
+
     for (_, material) in chromatic_aberration_materials.iter_mut() {
-        material.chromatic_aberration = *chromatic_aberration;
+        material.chromatic_aberration = ca;
     }
 }
 
