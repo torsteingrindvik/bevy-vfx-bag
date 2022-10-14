@@ -7,6 +7,10 @@ edition = "2021"
 bevy = { path = "../bevy", features = ["tga"] }
 bytemuck = "1.12.1"
 
+[dev-dependencies]
+color-eyre = "0.6"
+image = "0.24"
+
 [profile.dev]
 opt-level = 1
 

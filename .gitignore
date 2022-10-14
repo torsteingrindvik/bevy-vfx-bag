@@ -3,3 +3,4 @@
 .vscode
 Cargo.lock
 *.dot
+*.png
