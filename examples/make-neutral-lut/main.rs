@@ -1,3 +1,9 @@
+//! Makes a color lookup table which is neutral.
+//! This means that using the output image of this program
+//! as the mapping in a LUT shader should not alter the image,
+//! except for rounding errors introduced due to the size of this
+//! LUT being finite.
+
 use color_eyre::Result;
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 
@@ -8,7 +14,7 @@ const HEIGHT: u32 = BLOCK_SIZE;
 const WIDTH: u32 = BLOCK_SIZE * NUM_BLOCKS;
 const PIXELS: u32 = HEIGHT * WIDTH;
 
-const COLOR_INCREMENT: u32 = 256 / BLOCK_SIZE;
+const COLOR_INCREMENT: f32 = 256. / (BLOCK_SIZE - 1) as f32;
 
 #[derive(Debug, Clone, Copy)]
 struct Pixel {
@@ -33,9 +39,15 @@ fn make_lut() -> Vec<u8> {
         let block_index = (n % WIDTH) / BLOCK_SIZE;
 
         buf.push(Pixel {
-            r: (block_column * COLOR_INCREMENT) as u8,
-            g: (block_row * COLOR_INCREMENT) as u8,
-            b: (block_index * COLOR_INCREMENT) as u8,
+            // Red should increase from 0 to 255 within each block,
+            // in the horizontal direction
+            r: (block_column as f32 * COLOR_INCREMENT) as u8,
+
+            // Green should increase from 0 to 255, vertically
+            g: (block_row as f32 * COLOR_INCREMENT) as u8,
+
+            // Blue is constant within each block
+            b: (block_index as f32 * COLOR_INCREMENT) as u8,
         });
     }
 
