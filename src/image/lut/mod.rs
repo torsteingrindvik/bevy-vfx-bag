@@ -132,19 +132,6 @@ impl Lut3d {
         .expect("Should be able to load image from buffer");
 
         Self::new_from_image_sized(images, image, size)
-        // image.texture_descriptor.dimension = TextureDimension::D3;
-        // image.texture_descriptor.size = size;
-
-        // image.texture_view_descriptor = Some(TextureViewDescriptor {
-        //     label: Some("LUT TextureViewDescriptor"),
-        //     format: Some(image.texture_descriptor.format),
-        //     dimension: Some(TextureViewDimension::D3),
-        //     ..default()
-        // });
-
-        // let handle = images.add(image);
-
-        // Self(handle)
     }
 }
 
