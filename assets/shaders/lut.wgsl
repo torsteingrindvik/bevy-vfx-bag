@@ -27,11 +27,13 @@ fn fragment(
     let half_texel = vec3<f32>(1.0 / 64. / 2.);
 
     let raw_color = textureSample(texture, our_sampler, uv).rgb;
-    let lut_color = textureSample(lut, lut_sampler, raw_color + half_texel).rgb;
+    var out = textureSample(lut, lut_sampler, raw_color + half_texel).rgb;
 
-    if (uv.x < 0.5) {
-        return vec4<f32>(lut_color, 1.0);
-    } else {
-        return vec4<f32>(raw_color, 1.0);
+#ifdef SPLIT_VERTICALLY
+    if (uv.x > 0.5) {
+        out = raw_color;
     }
+#endif
+
+    return vec4<f32>(out, 1.0);
 }

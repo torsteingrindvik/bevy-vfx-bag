@@ -14,7 +14,7 @@ pub struct ExampleText(pub String);
 
 impl Default for ExampleText {
     fn default() -> Self {
-        Self("Hello World".into())
+        Self("Loading...".into())
     }
 }
 

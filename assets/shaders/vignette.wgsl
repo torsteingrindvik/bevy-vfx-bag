@@ -1,6 +1,5 @@
-#import bevy_pbr::mesh_view_bindings
+#import bevy_sprite::mesh2d_view_bindings
 #import bevy_pbr::utils
-
 
 @group(1) @binding(0)
 var texture: texture_2d<f32>;
@@ -34,6 +33,6 @@ fn fragment(
     var mask = smoothstep(vignette.radius + vignette.feathering, vignette.radius, circle);
 
     var output = scene * mask;
-    
+
     return vec4<f32>(output.rgb, 1.0);
 }

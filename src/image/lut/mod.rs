@@ -18,13 +18,15 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::{
+        mesh::MeshVertexBufferLayout,
         render_resource::{
-            AsBindGroup, Extent3d, ShaderRef, TextureDimension, TextureFormat,
-            TextureViewDescriptor, TextureViewDimension,
+            AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderRef,
+            SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureViewDescriptor,
+            TextureViewDimension,
         },
         texture::{CompressedImageFormats, ImageType},
     },
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dKey, Material2dPlugin, MaterialMesh2dBundle},
 };
 
 use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
@@ -38,9 +40,10 @@ pub struct Lut {
     /// The look-up texture.
     texture: Lut3d,
 
-    /// If the look-up texture should appear on top of the
-    /// output image.
-    pub show_overlay: bool,
+    /// If we should show the original image on one half of the screen,
+    /// and the LUT color graded output on the other half.
+    /// If `false`, only the color graded output is shown.
+    pub split_vertically: bool,
 }
 
 impl Lut {
@@ -57,7 +60,7 @@ impl FromWorld for Lut {
             .expect("LutPlugin should init LutNeutral");
         Self {
             texture: neutral.0.clone(),
-            show_overlay: true,
+            split_vertically: false,
         }
     }
 }
@@ -151,8 +154,15 @@ impl FromWorld for LutNeutral {
     }
 }
 
+impl<'a> From<&'a Lut> for Option<&'a Handle<Image>> {
+    fn from(lut: &'a Lut) -> Self {
+        Some(&lut.texture.0)
+    }
+}
+
 #[derive(Debug, AsBindGroup, TypeUuid, Clone)]
 #[uuid = "abb36dfa-9b2c-4150-8a50-f85c594c797e"]
+#[bind_group_data(LutMaterialKey)]
 struct LutMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -160,12 +170,46 @@ struct LutMaterial {
 
     #[texture(2, dimension = "3d")]
     #[sampler(3)]
-    lut: Handle<Image>,
+    lut: Lut,
 }
 
 impl Material2d for LutMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/lut.wgsl".into()
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let mut push_def = |def: &str| {
+            descriptor
+                .fragment
+                .as_mut()
+                .expect("Should have fragment state")
+                .shader_defs
+                .push(def.into())
+        };
+
+        if key.bind_group_data.split_vertically {
+            push_def("SPLIT_VERTICALLY");
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone)]
+struct LutMaterialKey {
+    split_vertically: bool,
+}
+
+impl From<&LutMaterial> for LutMaterialKey {
+    fn from(lut_material: &LutMaterial) -> Self {
+        Self {
+            split_vertically: lut_material.lut.split_vertically,
+        }
     }
 }
 
@@ -191,7 +235,7 @@ fn setup(
 
     let material_handle = lut_materials.add(LutMaterial {
         source_image: image_handle.clone(),
-        lut: lut.texture.0.clone(),
+        lut: lut.clone(),
     });
 
     commands.spawn((
@@ -217,7 +261,7 @@ fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
     }
 
     for (_, material) in lut_materials.iter_mut() {
-        material.lut = lut.texture.0.clone()
+        material.lut = lut.clone()
     }
 }
 

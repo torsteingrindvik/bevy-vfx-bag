@@ -90,22 +90,29 @@ fn update(
     mut lut: ResMut<Lut>,
     mut text: ResMut<examples_common::ExampleText>,
     luts_state: Res<LutsState>,
+    keyboard_input: Res<Input<KeyCode>>,
 ) {
     let num_luts = luts_state.ready.len();
     if num_luts == 0 {
         return;
     }
 
-    let choice_now = time.seconds_since_startup() as usize % num_luts;
-    if *choice == choice_now {
-        return;
-    } else {
-        *choice = choice_now;
+    if keyboard_input.just_pressed(KeyCode::S) {
+        lut.split_vertically = !lut.split_vertically;
     }
 
-    let (name, lut3d) = &luts_state.ready[*choice];
+    let choice_now = time.seconds_since_startup() as usize % num_luts;
 
-    lut.set_texture(lut3d);
+    let (name, lut3d) = &luts_state.ready[choice_now];
 
-    text.0 = format!("LUT {}/{num_luts}: {name:20}", *choice + 1);
+    if *choice != choice_now {
+        *choice = choice_now;
+        lut.set_texture(lut3d);
+    }
+
+    text.0 = format!(
+        "LUT {}/{num_luts}: {name}, [S]plit: {:?}",
+        *choice + 1,
+        lut.split_vertically,
+    );
 }
