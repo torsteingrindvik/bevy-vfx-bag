@@ -1,17 +1,28 @@
 //! 3D LUTs for color grading.
 //! See the [GPU Gems 2 article](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-24-using-lookup-tables-accelerate-color)
-use std::path::Path;
+//!
+//! # How to create your own
+//! First run the `make-neutral-lut` example to create a neutral LUT.
+//! Then simply open that in an image editor and make modifications using filters, and save it when you're happy.
+//!
+//! One trick is to take the neutral LUT and place it on top of a screenshot of your game.
+//! Then adjust colors of the whole combined image until you're happy.
+//! Then extract the LUT from your game screenshot and save it in the exact
+//! same size as it was originally.
+//! You can now use it to transform your game look into what you had in your image editor.
+//!
+//! Note that the LUT assets in this crate were created by simply loading the neutral LUT
+//! into the Windows Photos application, and applying the filters there (hence the names).
 
 use bevy::{
-    asset::AssetPath,
     prelude::*,
     reflect::TypeUuid,
     render::{
         render_resource::{
-            AddressMode, AsBindGroup, Extent3d, FilterMode, SamplerDescriptor, ShaderRef,
-            TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
+            AsBindGroup, Extent3d, ShaderRef, TextureDimension, TextureFormat,
+            TextureViewDescriptor, TextureViewDimension,
         },
-        texture::{CompressedImageFormats, ImageSampler, ImageType},
+        texture::{CompressedImageFormats, ImageType},
     },
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
 };
@@ -34,8 +45,8 @@ pub struct Lut {
 
 impl Lut {
     /// Set the LUT.
-    pub fn set_texture(&mut self, texture: Lut3d) {
-        self.texture = texture;
+    pub fn set_texture(&mut self, texture: &Lut3d) {
+        self.texture = texture.clone();
     }
 }
 
@@ -56,6 +67,12 @@ impl FromWorld for Lut {
 #[derive(Debug, Clone, Resource)]
 pub struct Lut3d(Handle<Image>);
 
+const LUT3D_SIZE: Extent3d = Extent3d {
+    width: 64,
+    height: 64,
+    depth_or_array_layers: 64,
+};
+
 impl Lut3d {
     /// Create a new 3D LUT.
     ///
@@ -67,34 +84,25 @@ impl Lut3d {
     /// 3D textures of other sizes and formats might be supported if there is
     /// a need for it.
     pub fn new(images: &mut Assets<Image>, texture_data: &[u8]) -> Self {
-        Self::new_sized(
-            images,
-            texture_data,
-            Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 64,
-            },
-        )
+        Self::new_sized(images, texture_data, LUT3D_SIZE)
     }
 
-    pub(crate) fn new_sized(
-        images: &mut Assets<Image>,
-        texture_data: &[u8],
-        size: Extent3d,
-    ) -> Self {
-        let mut image = Image::from_buffer(
-            texture_data,
-            ImageType::Extension("png"), // todo
-            CompressedImageFormats::NONE,
-            // If `true` the output the mapping is very dark.
-            // If not, it's much closer to the original.
-            false,
-        )
-        .expect("Should be able to load image from buffer");
+    /// Create a new 3D LUT.
+    ///
+    /// This has the same assumptions as [`Lut3d::new`].
+    pub fn from_image(images: &mut Assets<Image>, image_handle: &Handle<Image>) -> Self {
+        let image = images
+            .get(image_handle)
+            .expect("Handle should refer to image")
+            .clone();
 
+        Self::new_from_image(images, image)
+    }
+
+    fn new_from_image_sized(images: &mut Assets<Image>, mut image: Image, size: Extent3d) -> Self {
         image.texture_descriptor.dimension = TextureDimension::D3;
         image.texture_descriptor.size = size;
+        image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
 
         image.texture_view_descriptor = Some(TextureViewDescriptor {
             label: Some("LUT TextureViewDescriptor"),
@@ -106,6 +114,37 @@ impl Lut3d {
         let handle = images.add(image);
 
         Self(handle)
+    }
+
+    fn new_from_image(images: &mut Assets<Image>, image: Image) -> Self {
+        Self::new_from_image_sized(images, image, LUT3D_SIZE)
+    }
+
+    fn new_sized(images: &mut Assets<Image>, texture_data: &[u8], size: Extent3d) -> Self {
+        let image = Image::from_buffer(
+            texture_data,
+            ImageType::Extension("png"), // todo
+            CompressedImageFormats::NONE,
+            // If `true` the output the mapping is very dark.
+            // If not, it's much closer to the original.
+            false,
+        )
+        .expect("Should be able to load image from buffer");
+
+        Self::new_from_image_sized(images, image, size)
+        // image.texture_descriptor.dimension = TextureDimension::D3;
+        // image.texture_descriptor.size = size;
+
+        // image.texture_view_descriptor = Some(TextureViewDescriptor {
+        //     label: Some("LUT TextureViewDescriptor"),
+        //     format: Some(image.texture_descriptor.format),
+        //     dimension: Some(TextureViewDimension::D3),
+        //     ..default()
+        // });
+
+        // let handle = images.add(image);
+
+        // Self(handle)
     }
 }
 
@@ -191,69 +230,9 @@ fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
     }
 
     for (_, material) in lut_materials.iter_mut() {
-        // material.chromatic_aberration = ca;
+        material.lut = lut.texture.0.clone()
     }
 }
-
-// LUTs need to use some specific sampler settings.
-// fn fixup_texture(
-//     mut done: Local<bool>,
-//     mut ev_asset: EventReader<AssetEvent<Image>>,
-//     mut assets: ResMut<Assets<Image>>,
-//     lut: ResMut<Lut>,
-//     mut lut_materials: ResMut<Assets<LutMaterial>>,
-// ) {
-//     if *done {
-//         return;
-//     }
-
-//     for ev in ev_asset.iter() {
-//         if let AssetEvent::Created { handle } = ev {
-//             if *handle == lut.texture {
-//                 *done = true;
-
-//                 let image = assets
-//                     .get_mut(handle)
-//                     .expect("Handle should point to asset");
-
-//                 image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-//                     label: Some("LUT Sampler"),
-//                     // We want to linearly interpolate our magic 3D LUT cube.
-//                     // TODO: Allow switching this to see the effect?
-//                     mag_filter: FilterMode::Linear,
-//                     min_filter: FilterMode::Linear,
-//                     ..default()
-//                 });
-
-//                 // TODO: Not sure about this vs. sRGB
-//                 let format = TextureFormat::Rgba8Unorm;
-//                 image.texture_descriptor.format = format;
-
-//                 image.texture_view_descriptor = Some(TextureViewDescriptor {
-//                     label: Some("LUT TextureViewDescriptor"),
-//                     format: Some(format),
-//                     dimension: Some(TextureViewDimension::D3),
-//                     ..default()
-//                 });
-
-//                 for (_, material) in lut_materials.iter_mut() {
-//                     material.lut = Some(handle.clone());
-//                 }
-//             }
-//         }
-//     }
-// }
-
-// fn init_resources(mut commands: Commands) {
-//     // let lut_neutral = asset_server.load("luts/neutral.png");
-//     // commands.insert_resource(LutNeutral(lut_neutral));
-//     // commands.insert_resource(LutNeutral(lut_neutral));
-
-//     // commands.insert_resource(LutNeutral(Lut3d::new(images, "luts/neutral.png")));
-
-//     commands.init_resource::<LutNeutral>();
-//     commands.init_resource::<Lut>();
-// }
 
 impl Plugin for LutPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
@@ -269,13 +248,3 @@ impl Plugin for LutPlugin {
             .add_system(update_lut);
     }
 }
-
-// REMOVE
-
-// #[derive(...)]
-// #[uuid = "..."]
-// struct MyMaterial {
-//     #[texture(0)]
-//     #[sampler(1)]
-//     my_3d_texture: Option<Handle<Image>>,
-// }
