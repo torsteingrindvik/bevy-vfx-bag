@@ -291,3 +291,8 @@ mod ui {
         }
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    println!("Not an example, just shared code between examples")
+}

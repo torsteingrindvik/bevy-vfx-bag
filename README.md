@@ -2,9 +2,33 @@
 
 This crate has an assortment of effects easily applied to Bevy apps via plugins.
 
+## Getting started
+
+The general strategy is:
+
+* Add the main plugin: `BevyVfxBagPlugin`
+* Add the effect plugin you are interested in
+* Change the `RenderTarget` of the camera which you want the effect to apply to to the `BevyVfxBagImage` resource's image handle. This is what is used for post processing.
+* Add any systems to change effect parameters at runtime
+
+```rust,ignore
+// See the examples folder for fleshed out examples,
+// this just shows the general strategy.
+
+fn main(){
+  App::new()
+    .add_plugins(DefaultPlugins)
+    .add_plugin(BevyVfxBagPlugin) // This needs to be added for any effect to work
+    .add_plugin(FlipPlugin) // This needs to be added for the flip effect to work
+    .add_startup_system(startup_my_camera_and_set_render_target)
+    .add_system(change_flip_when_appropriate)
+    .run();
+}
+```
+
 ## Examples
 
-All videos are captured from running the examples.
+All videos are captured from running the [examples](https://github.com/torsteingrindvik/bevy-vfx-bag/tree/main/examples) examples.
 
 Do `cargo r --example` in this repository to get a list of examples you may run.
 Some examples use keyboard/mouse input to change parameters at runtime as well.
