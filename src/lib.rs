@@ -2,7 +2,6 @@
 #![deny(clippy::unwrap_used)] // Let's try to explain invariants when we unwrap (so use expect).
 #![deny(missing_docs)] // Let's try to have good habits.
 #![doc = include_str!("../README.md")]
-//! This crate allows you to add grapical effects to your Bevy applications.
 
 use bevy::prelude::{App, *};
 use bevy::render::render_resource::{
