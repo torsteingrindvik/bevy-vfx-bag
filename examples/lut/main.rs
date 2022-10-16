@@ -3,10 +3,9 @@ mod examples_common;
 
 use bevy::{prelude::*, utils::HashMap};
 
-use bevy::render::camera::RenderTarget;
 use bevy_vfx_bag::{
     image::lut::{Lut, Lut3d, LutPlugin},
-    BevyVfxBagImage, BevyVfxBagPlugin,
+    BevyVfxBagPlugin, PostProcessingInput,
 };
 
 // Load the LUT presets from disk via the asset server,
@@ -33,23 +32,14 @@ fn main() {
         .run();
 }
 
-fn startup(
-    mut commands: Commands,
-    image_handle: Res<BevyVfxBagImage>,
-    assets: Res<AssetServer>,
-    mut luts: ResMut<LutsState>,
-) {
+fn startup(mut commands: Commands, assets: Res<AssetServer>, mut luts: ResMut<LutsState>) {
     commands
         .spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
-            camera: Camera {
-                target: RenderTarget::Image(image_handle.clone()),
-                ..default()
-            },
             ..default()
         })
-        .insert(UiCameraConfig { show_ui: false });
+        .insert(PostProcessingInput);
 
     *luts = LutsState {
         handles: HashMap::from_iter(vec![

@@ -3,7 +3,6 @@
 #![deny(missing_docs)] // Let's try to have good habits.
 #![doc = include_str!("../README.md")]
 
-use bevy::prelude::{App, *};
 use bevy::render::render_resource::{
     Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
@@ -11,6 +10,10 @@ use bevy::render::texture::BevyDefault;
 use bevy::render::view::RenderLayers;
 use bevy::sprite::Mesh2dHandle;
 use bevy::window::WindowResized;
+use bevy::{
+    prelude::{App, *},
+    render::camera::RenderTarget,
+};
 
 use crate::quad::window_sized_quad;
 
@@ -20,6 +23,13 @@ pub mod image;
 
 /// Helpers for making quads.
 pub mod quad;
+
+/// For post processing effects to work, this marker should be added to a camera.
+/// This camera will be changed to render to an image buffer which will then be applied
+/// post processing to.
+/// Note that UI will be disabled for the marked camera, and applied _after_ effects are added.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct PostProcessingInput;
 
 /// This resource holds the image handle of the image which will be used for
 /// sampling before applying effects.
@@ -148,12 +158,29 @@ fn update(
     }
 }
 
+fn setup_post_processing_inputs(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Camera), With<PostProcessingInput>>,
+    image_handle: Res<BevyVfxBagImage>,
+) {
+    for (entity, mut camera) in &mut query {
+        // The camera that wants to be post processed must first render to our image.
+        camera.target = RenderTarget::Image(image_handle.0.clone());
+
+        // We apply post process effects before UI is shown, so turn it off for now.
+        commands
+            .entity(entity)
+            .insert(UiCameraConfig { show_ui: false });
+    }
+}
+
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<BevyVfxBagImage>()
             .init_resource::<BevyVfxBagRenderLayer>()
             .init_resource::<BevyVfxBagPriority>()
             .add_startup_system(setup)
+            .add_startup_system_to_stage(StartupStage::PostStartup, setup_post_processing_inputs)
             .add_system(update);
     }
 }

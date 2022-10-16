@@ -1,5 +1,4 @@
-//! All credits to Ben Cloward for this effect.
-//! See [this video](https://www.youtube.com/watch?v=Ftpf87brKWg).
+//! Credits to Ben Cloward, see [the YouTube video](https://www.youtube.com/watch?v=Ftpf87brKWg).
 
 use bevy::{
     prelude::*,

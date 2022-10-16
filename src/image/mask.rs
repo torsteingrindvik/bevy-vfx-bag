@@ -1,4 +1,4 @@
-//! Credits to Ben Cloward, see: https://www.youtube.com/watch?v=HcMFgJas0yg
+//! Credits to Ben Cloward, see [the YouTube video](https://www.youtube.com/watch?v=HcMFgJas0yg).
 
 use bevy::{
     prelude::*,
