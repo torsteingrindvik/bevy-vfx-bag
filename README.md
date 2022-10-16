@@ -8,7 +8,7 @@ The general strategy is:
 
 * Add the main plugin: `BevyVfxBagPlugin`.
 * Add the effect plugin you are interested in.
-* Change the `RenderTarget` of the camera which you want the effect to apply to to the `BevyVfxBagImage` resource's image handle. This is what is used for post processing.
+* Add the `PostProcessingInput` marker component to your camera. This camera's output is then used as input for the post processing effects.
 * Add any systems to change effect parameters at runtime.
 
 ```rust,ignore
@@ -20,9 +20,19 @@ fn main(){
     .add_plugins(DefaultPlugins)
     .add_plugin(BevyVfxBagPlugin) // This needs to be added for any effect to work
     .add_plugin(FlipPlugin) // This needs to be added for the flip effect to work
-    .add_startup_system(startup_my_camera_and_set_render_target)
-    .add_system(change_flip_when_appropriate)
+    .add_startup_system(setup)
+    .add_system(update)
     .run();
+}
+
+fn setup(mut commands: Commands) {
+    commands
+        .spawn(Camera3dBundle { ... })
+        .insert(PostProcessingInput); // Marking the camera is important!
+}
+
+fn update(mut flip: ResMut<Flip>) {
+    // Here I can change the parameters of this effect at runtime.
 }
 ```
 

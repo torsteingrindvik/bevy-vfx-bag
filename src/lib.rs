@@ -24,7 +24,10 @@ pub mod image;
 /// Helpers for making quads.
 pub mod quad;
 
-/// hi
+/// For post processing effects to work, this marker should be added to a camera.
+/// This camera will be changed to render to an image buffer which will then be applied
+/// post processing to.
+/// Note that UI will be disabled for the marked camera, and applied _after_ effects are added.
 #[derive(Debug, Clone, Copy, Component)]
 pub struct PostProcessingInput;
 
