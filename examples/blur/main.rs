@@ -42,15 +42,15 @@ fn update(
     let mut radius_diff = 0.0;
 
     if keyboard_input.just_pressed(KeyCode::Left) {
-        blur_diff = -0.1;
+        radius_diff = -0.001;
     } else if keyboard_input.just_pressed(KeyCode::Right) {
-        blur_diff = 0.1;
+        radius_diff = 0.001;
     }
 
     if keyboard_input.just_pressed(KeyCode::Up) {
-        radius_diff = 0.001;
+        blur_diff = 0.1;
     } else if keyboard_input.just_pressed(KeyCode::Down) {
-        radius_diff = -0.001;
+        blur_diff = -0.1;
     }
 
     blur.amount += blur_diff;
@@ -58,7 +58,7 @@ fn update(
 
     // Display blur amount on screen
     text.0 = format!(
-        "(Press ←↑→↓) Blur: {:.2?}, radius: {:.3?}",
+        "Blur (↑↓): {:.2?}, radius (←→): {:.3?}",
         blur.amount, blur.kernel_radius
     );
 }
