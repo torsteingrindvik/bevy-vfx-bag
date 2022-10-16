@@ -15,3 +15,6 @@ pub mod wave;
 
 /// Chromatic aberration.
 pub mod chromatic_aberration;
+
+/// LUT (look-up texture) color grading.
+pub mod lut;

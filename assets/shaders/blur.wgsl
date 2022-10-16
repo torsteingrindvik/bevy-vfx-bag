@@ -1,6 +1,5 @@
-#import bevy_pbr::mesh_view_bindings
+#import bevy_sprite::mesh2d_view_bindings
 #import bevy_pbr::utils
-
 
 @group(1) @binding(0)
 var texture: texture_2d<f32>;
@@ -34,16 +33,7 @@ fn s_blurred(uv: vec2<f32>) -> vec3<f32> {
     let br = p(1.0, -1.0);
 
     return 
-        (s(uv) + 
-        s(uv + r) + 
-        s(uv + tr) +
-        s(uv + t) +
-        s(uv + tl) +
-        s(uv + l) +
-        s(uv + bl) +
-        s(uv + b) +
-        s(uv + br))
-        / 9.
+        (s(uv) + s(uv + r) + s(uv + tr) + s(uv + t) + s(uv + tl) + s(uv + l) + s(uv + bl) + s(uv + b) + s(uv + br)) / 9.
         ;
 }
 

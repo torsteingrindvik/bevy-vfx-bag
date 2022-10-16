@@ -35,7 +35,7 @@ impl Default for Blur {
 }
 
 #[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "70bc3d3b-46e2-40ea-bedc-e0d73ffdd3fd"]
+#[uuid = "1b35a535-d428-4822-aba5-15e104ea80b5"]
 struct BlurMaterial {
     #[texture(0)]
     #[sampler(1)]

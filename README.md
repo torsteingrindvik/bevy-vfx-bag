@@ -60,6 +60,17 @@ Allows flipping the input image horizontally, vertically, or both.
 
 [Flip Example Video](https://user-images.githubusercontent.com/52322338/195917100-acece75a-a867-43c8-a850-62ca7a1109f0.mp4)
 
+### LUT
+
+Allows color grading via look-up textures.
+There is also an example to generate the neutral LUT, `cargo r --example make-neutral-lut`.
+This file can then be modified in any image editor in order to replicate the look/feeling you're after.
+
+The plugin allows splitting the image vertically (shown in the video), which can be used to compare the look
+before and after color grading.
+
+[LUT Example Video](https://user-images.githubusercontent.com/52322338/196005149-a76e6d5b-d227-4e71-9f3f-4e1d86b4d12e.mp4)
+
 ### Raindrops
 
 Shows raindrops on the screen.
