@@ -1,5 +1,5 @@
-/// A vignette effect.
-pub mod vignette;
+/// A mask effect.
+pub mod mask;
 
 /// A flip effect. Flips the texture in a given direction.
 pub mod flip;
