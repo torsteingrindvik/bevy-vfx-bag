@@ -3,16 +3,19 @@
 #![deny(missing_docs)] // Let's try to have good habits.
 #![doc = include_str!("../README.md")]
 
-use bevy::render::render_resource::{
-    Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-};
-use bevy::render::texture::BevyDefault;
-use bevy::render::view::RenderLayers;
-use bevy::sprite::Mesh2dHandle;
-use bevy::window::WindowResized;
 use bevy::{
+    core_pipeline::clear_color::ClearColorConfig,
     prelude::{App, *},
-    render::camera::RenderTarget,
+    render::{
+        camera::RenderTarget,
+        render_resource::{
+            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+        },
+        texture::BevyDefault,
+        view::RenderLayers,
+    },
+    sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
+    window::WindowResized,
 };
 
 use crate::quad::window_sized_quad;
@@ -24,6 +27,9 @@ pub mod image;
 /// Helpers for making quads.
 pub mod quad;
 
+/// A thing.
+pub struct PostProcessing {}
+
 /// For post processing effects to work, this marker should be added to a camera.
 /// This camera will be changed to render to an image buffer which will then be applied
 /// post processing to.
@@ -31,17 +37,56 @@ pub mod quad;
 #[derive(Debug, Clone, Copy, Component)]
 pub struct PostProcessingInput;
 
-/// This resource holds the image handle of the image which will be used for
+#[derive(Debug, Clone, Component)]
+struct PostProcessing2dCamera(Handle<Image>);
+
+/// This resource holds the image handles of the images which will be used for
 /// sampling before applying effects.
-/// Typically, the [`bevy::render::camera::RenderTarget`] of the camera that wants post processing
-/// should use this.
 #[derive(Debug, Resource)]
-pub struct BevyVfxBagImage(Handle<Image>);
+struct BevyVfxBagState {
+    // The two image buffers in use.
+    image_handle_a: Handle<Image>,
+    image_handle_b: Handle<Image>,
+
+    // The size of the above images (they are equally sized).
+    extent: Extent3d,
+
+    // If the next effect should use image A as input.
+    image_a_next_input: bool,
+
+    // Last used priority (used by effect cameras).
+    priority: isize,
+}
+
+impl BevyVfxBagState {
+    fn next_image_io_handles(&mut self) -> (Handle<Image>, Handle<Image>) {
+        let (i, o) = if self.image_a_next_input {
+            (
+                self.image_handle_a.clone_weak(),
+                self.image_handle_b.clone_weak(),
+            )
+        } else {
+            (
+                self.image_handle_b.clone_weak(),
+                self.image_handle_a.clone_weak(),
+            )
+        };
+
+        self.image_a_next_input = !self.image_a_next_input;
+
+        (i, o)
+    }
+
+    fn next_priority(&mut self) -> isize {
+        self.priority += 1;
+        self.priority
+    }
+}
 
 #[derive(Debug, Component)]
 pub(crate) struct ShouldResize;
 
-fn make_image(width: u32, height: u32) -> Image {
+fn make_image(width: u32, height: u32, name: &'static str) -> Image {
     let size = Extent3d {
         width,
         height,
@@ -50,7 +95,7 @@ fn make_image(width: u32, height: u32) -> Image {
 
     let mut image = Image {
         texture_descriptor: TextureDescriptor {
-            label: Some("BevyVfxBag Main Image"),
+            label: Some(name),
             size,
             mip_level_count: 1,
             sample_count: 1,
@@ -66,7 +111,7 @@ fn make_image(width: u32, height: u32) -> Image {
     image
 }
 
-impl FromWorld for BevyVfxBagImage {
+impl FromWorld for BevyVfxBagState {
     fn from_world(world: &mut World) -> Self {
         let (width, height) = {
             let windows = world.resource::<Windows>();
@@ -77,18 +122,28 @@ impl FromWorld for BevyVfxBagImage {
 
         let mut image_assets = world.resource_mut::<Assets<Image>>();
 
-        let image = make_image(width, height);
-        let image_handle = image_assets.add(image);
+        let image_a = make_image(width, height, "BevyVfxBag Image A");
+        let image_b = make_image(width, height, "BevyVfxBag Image B");
 
-        Self(image_handle)
-    }
-}
+        let image_handle_a = image_assets.add(image_a);
+        let image_handle_b = image_assets.add(image_b);
 
-impl std::ops::Deref for BevyVfxBagImage {
-    type Target = Handle<Image>;
+        let extent = Extent3d {
+            width,
+            height,
+            ..default()
+        };
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        Self {
+            image_handle_a,
+            image_handle_b,
+            extent,
+
+            priority: 0,
+
+            // Yes, the first effect should use image A for reading/input.
+            image_a_next_input: true,
+        }
     }
 }
 
@@ -96,42 +151,79 @@ impl std::ops::Deref for BevyVfxBagImage {
 /// systems which other plugins in this crate rely on.
 pub struct BevyVfxBagPlugin;
 
-/// The render layer post processing effects are rendered to.
-/// Defaults to the last possible layer.
-#[derive(Debug, Resource)]
-pub struct BevyVfxBagRenderLayer(pub RenderLayers);
+fn new_effect_state(world: &mut World) -> EffectState {
+    let mut state = world
+        .get_resource_mut::<BevyVfxBagState>()
+        .expect("Should exist");
 
-impl Default for BevyVfxBagRenderLayer {
-    fn default() -> Self {
-        Self(RenderLayers::layer((RenderLayers::TOTAL_LAYERS - 1) as u8))
+    let priority = state.next_priority();
+
+    let (input_image_handle, output_image_handle) = state.next_image_io_handles();
+
+    EffectState {
+        priority,
+        render_layers: RenderLayers::layer(priority as u8),
+        input_image_handle,
+        output_image_handle,
     }
 }
 
-/// The priority of the camera post processing effects are rendered to.
-/// Defaults to `1`, the one after the default camera.
-#[derive(Debug, Resource)]
-pub struct BevyVfxBagPriority(isize);
-
-impl Default for BevyVfxBagPriority {
-    fn default() -> Self {
-        Self(1)
-    }
+#[derive(Debug, Clone)]
+struct EffectState {
+    priority: isize,
+    render_layers: RenderLayers,
+    input_image_handle: Handle<Image>,
+    output_image_handle: Handle<Image>,
 }
 
-fn setup(
+trait HasEffectState {
+    fn state(&self) -> EffectState;
+}
+
+pub(crate) fn setup_effect<M>(
     mut commands: Commands,
-    priority: Res<BevyVfxBagPriority>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-) {
+    mut meshes: ResMut<Assets<Mesh>>,
+    bvb_image: Res<BevyVfxBagState>,
+    mut effect_materials: ResMut<Assets<M>>,
+    effect_material: Res<M>,
+) where
+    M: Material2d + FromWorld + Resource + HasEffectState,
+{
+    let effect_state = effect_material.state();
+
     commands.spawn((
         Camera2dBundle {
             camera: Camera {
-                priority: priority.0,
+                priority: effect_state.priority,
                 ..default()
             },
             ..default()
         },
-        render_layer.0,
+        effect_state.render_layers,
+        PostProcessing2dCamera(effect_state.output_image_handle.clone_weak()),
+    ));
+
+    let extent = bvb_image.extent;
+
+    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
+        extent.width as f32,
+        extent.height as f32,
+    ))));
+
+    let material_handle = effect_materials.add(effect_material.clone());
+
+    commands.spawn((
+        MaterialMesh2dBundle {
+            mesh: quad_handle.into(),
+            material: material_handle,
+            transform: Transform {
+                translation: Vec3::new(0.0, 0.0, 1.5),
+                ..default()
+            },
+            ..default()
+        },
+        effect_state.render_layers,
+        ShouldResize,
     ));
 }
 
@@ -158,29 +250,62 @@ fn update(
     }
 }
 
-fn setup_post_processing_inputs(
+fn setup_post_processing_input(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Camera), With<PostProcessingInput>>,
-    image_handle: Res<BevyVfxBagImage>,
+    bvb_image: Res<BevyVfxBagState>,
 ) {
-    for (entity, mut camera) in &mut query {
-        // The camera that wants to be post processed must first render to our image.
-        camera.target = RenderTarget::Image(image_handle.0.clone());
+    let (entity, mut camera) = query.single_mut();
 
-        // We apply post process effects before UI is shown, so turn it off for now.
-        commands
-            .entity(entity)
-            .insert(UiCameraConfig { show_ui: false });
+    // The camera that wants to be post processed must render to our first image buffer.
+    camera.target = RenderTarget::Image(bvb_image.image_handle_a.clone_weak());
+
+    // We apply post process effects before UI is shown, so turn it off for now.
+    commands
+        .entity(entity)
+        .insert(UiCameraConfig { show_ui: false });
+}
+
+fn setup_post_processing_2d_cameras(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Camera, &mut Camera2d, &PostProcessing2dCamera)>,
+) {
+    let mut cameras_2d = query.iter_mut().collect::<Vec<_>>();
+
+    // Sort cameras such that they are in priority order.
+    // This will be the same order effect plugins were added.
+    cameras_2d.sort_unstable_by_key(|(_, camera, _, _)| camera.priority);
+
+    // If we chain effects, the effect will be wiped out of we clear the
+    // next render pass. So don't.
+    if let Some((_, except_first)) = cameras_2d.split_first_mut() {
+        for (_, _, camera_2d, _) in except_first {
+            camera_2d.clear_color = ClearColorConfig::None;
+        }
+    }
+
+    if let Some((_, except_last)) = cameras_2d.split_last_mut() {
+        for (e, camera, _, PostProcessing2dCamera(image_handle)) in except_last.iter_mut() {
+            // The UI should only be rendered at the very end.
+            commands
+                .entity(*e)
+                .insert(UiCameraConfig { show_ui: false });
+
+            // 2D cameras should write to a specified image handle.
+            // The last should not- it will render to screen.
+            camera.target = RenderTarget::Image(image_handle.clone_weak());
+        }
     }
 }
 
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BevyVfxBagImage>()
-            .init_resource::<BevyVfxBagRenderLayer>()
-            .init_resource::<BevyVfxBagPriority>()
-            .add_startup_system(setup)
-            .add_startup_system_to_stage(StartupStage::PostStartup, setup_post_processing_inputs)
+        app.init_resource::<BevyVfxBagState>()
+            .add_startup_system_to_stage(StartupStage::PostStartup, setup_post_processing_input)
+            .add_startup_system_to_stage(
+                StartupStage::PostStartup,
+                setup_post_processing_2d_cameras,
+            )
             .add_system(update);
     }
 }

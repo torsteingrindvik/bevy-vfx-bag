@@ -2,10 +2,10 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows blurring the scene.
 /// Add this plugin to the [`App`] in order to use it.
@@ -34,7 +34,7 @@ impl Default for Blur {
     }
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "1b35a535-d428-4822-aba5-15e104ea80b5"]
 struct BlurMaterial {
     #[texture(0)]
@@ -43,6 +43,8 @@ struct BlurMaterial {
 
     #[uniform(2)]
     blur: Blur,
+
+    state: EffectState,
 }
 
 impl Material2d for BlurMaterial {
@@ -51,46 +53,23 @@ impl Material2d for BlurMaterial {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut blur_materials: ResMut<Assets<BlurMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    blur: Res<Blur>,
-    images: Res<Assets<Image>>,
-) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
+impl HasEffectState for BlurMaterial {
+    fn state(&self) -> EffectState {
+        self.state.clone()
+    }
+}
 
-    let extent = image.texture_descriptor.size;
+impl FromWorld for BlurMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let blur = world.get_resource::<Blur>().expect("Blur resource");
 
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = blur_materials.add(BlurMaterial {
-        source_image: image_handle.clone(),
-        blur: *blur,
-    });
-
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
-
-    debug!("OK");
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            blur: *blur,
+            state,
+        }
+    }
 }
 
 fn update_blur(mut blur_materials: ResMut<Assets<BlurMaterial>>, blur: Res<Blur>) {
@@ -109,7 +88,7 @@ impl Plugin for BlurPlugin {
 
         app.init_resource::<Blur>()
             .add_plugin(Material2dPlugin::<BlurMaterial>::default())
-            .add_startup_system(setup)
+            .add_startup_system(setup_effect::<BlurMaterial>)
             .add_system(update_blur);
     }
 }
