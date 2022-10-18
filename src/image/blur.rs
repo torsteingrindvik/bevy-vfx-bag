@@ -87,6 +87,7 @@ impl Plugin for BlurPlugin {
         let _span = debug_span!("BlurPlugin build").entered();
 
         app.init_resource::<Blur>()
+            .init_resource::<BlurMaterial>()
             .add_plugin(Material2dPlugin::<BlurMaterial>::default())
             .add_startup_system(setup_effect::<BlurMaterial>)
             .add_system(update_blur);

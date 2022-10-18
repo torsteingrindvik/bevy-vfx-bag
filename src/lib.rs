@@ -27,9 +27,6 @@ pub mod image;
 /// Helpers for making quads.
 pub mod quad;
 
-/// A thing.
-pub struct PostProcessing {}
-
 /// For post processing effects to work, this marker should be added to a camera.
 /// This camera will be changed to render to an image buffer which will then be applied
 /// post processing to.
