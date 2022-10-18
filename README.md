@@ -104,6 +104,13 @@ Not shown is changing the radius, and changing the color of the vignette.
 
 [Vignette Example Video](https://user-images.githubusercontent.com/52322338/195917174-0be12446-d527-4d81-8e0d-24370b8bdd03.mp4)
 
+### Underwater
+
+Underwater (ish) effect.
+Shoehorns most effects into one example, to show how they may be stacked.
+
+[Underwater Example Video](https://user-images.githubusercontent.com/52322338/196513586-dbf0f822-0144-4af8-b11d-177fada21311.mp4)
+
 ### Wave
 
 Shows displacing original image sampling in waves over the screen.
