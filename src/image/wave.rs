@@ -2,10 +2,10 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows creating a wave across the image.
 /// A wave can be customized in the X and Y axes for interesting effects.
@@ -39,7 +39,7 @@ pub struct Wave {
     pub amplitude_y: f32,
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "79fa38f9-ca04-4e59-83f9-da0de45afc04"]
 struct WaveMaterial {
     #[texture(0)]
@@ -48,6 +48,14 @@ struct WaveMaterial {
 
     #[uniform(2)]
     wave: Wave,
+
+    state: EffectState,
+}
+
+impl HasEffectState for WaveMaterial {
+    fn state(&self) -> crate::EffectState {
+        self.state.clone()
+    }
 }
 
 impl Material2d for WaveMaterial {
@@ -56,46 +64,17 @@ impl Material2d for WaveMaterial {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut wave_materials: ResMut<Assets<WaveMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    wave: Res<Wave>,
-    images: Res<Assets<Image>>,
-) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
+impl FromWorld for WaveMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let wave = world.get_resource::<Wave>().expect("Wave resource");
 
-    let extent = image.texture_descriptor.size;
-
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = wave_materials.add(WaveMaterial {
-        source_image: image_handle.clone(),
-        wave: *wave,
-    });
-
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
-
-    debug!("OK");
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            state,
+            wave: *wave,
+        }
+    }
 }
 
 fn update_wave(mut wave_materials: ResMut<Assets<WaveMaterial>>, wave: Res<Wave>) {
@@ -113,8 +92,9 @@ impl Plugin for WavePlugin {
         let _span = debug_span!("WavePlugin build").entered();
 
         app.init_resource::<Wave>()
+            .init_resource::<WaveMaterial>()
             .add_plugin(Material2dPlugin::<WaveMaterial>::default())
-            .add_startup_system(setup)
+            .add_startup_system(setup_effect::<WaveMaterial>)
             .add_system(update_wave);
     }
 }

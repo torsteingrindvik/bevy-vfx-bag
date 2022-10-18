@@ -26,10 +26,10 @@ use bevy::{
         },
         texture::{CompressedImageFormats, ImageType},
     },
-    sprite::{Material2d, Material2dKey, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows using look-up textures for color grading.
 pub struct LutPlugin;
@@ -160,7 +160,7 @@ impl<'a> From<&'a Lut> for Option<&'a Handle<Image>> {
     }
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "abb36dfa-9b2c-4150-8a50-f85c594c797e"]
 #[bind_group_data(LutMaterialKey)]
 struct LutMaterial {
@@ -171,6 +171,14 @@ struct LutMaterial {
     #[texture(2, dimension = "3d")]
     #[sampler(3)]
     lut: Lut,
+
+    state: EffectState,
+}
+
+impl HasEffectState for LutMaterial {
+    fn state(&self) -> crate::EffectState {
+        self.state.clone()
+    }
 }
 
 impl Material2d for LutMaterial {
@@ -200,6 +208,19 @@ impl Material2d for LutMaterial {
     }
 }
 
+impl FromWorld for LutMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let lut = world.get_resource::<Lut>().expect("Lut resource");
+
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            state,
+            lut: lut.clone(),
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone)]
 struct LutMaterialKey {
     split_vertically: bool,
@@ -211,48 +232,6 @@ impl From<&LutMaterial> for LutMaterialKey {
             split_vertically: lut_material.lut.split_vertically,
         }
     }
-}
-
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut lut_materials: ResMut<Assets<LutMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    lut: Res<Lut>,
-    images: Res<Assets<Image>>,
-) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
-
-    let extent = image.texture_descriptor.size;
-
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = lut_materials.add(LutMaterial {
-        source_image: image_handle.clone(),
-        lut: lut.clone(),
-    });
-
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
-
-    debug!("OK");
 }
 
 fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
@@ -269,13 +248,15 @@ impl Plugin for LutPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("LUT build").entered();
 
-        app.add_plugin(Material2dPlugin::<LutMaterial>::default())
+        app
             // Initialize the fallback neutral LUT in case the user
             // has not initialized [`Lut`]
             .init_resource::<LutNeutral>()
             // Now initialize [`Lut`], which will then use [`LutNeutral`] if it must.
             .init_resource::<Lut>()
-            .add_startup_system(setup)
+            .init_resource::<LutMaterial>()
+            .add_plugin(Material2dPlugin::<LutMaterial>::default())
+            .add_startup_system(setup_effect::<LutMaterial>)
             .add_system(update_lut);
     }
 }

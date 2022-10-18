@@ -234,7 +234,7 @@ mod ui {
                     position_type: PositionType::Absolute,
                     position: UiRect {
                         bottom: Val::Px(5.0),
-                        right: Val::Px(15.0),
+                        left: Val::Px(15.0),
                         ..default()
                     },
                     ..default()
@@ -262,6 +262,12 @@ mod ui {
                 ])
                 .with_style(Style {
                     align_self: AlignSelf::FlexEnd,
+                    position_type: PositionType::Absolute,
+                    position: UiRect {
+                        top: Val::Px(5.0),
+                        right: Val::Px(15.0),
+                        ..default()
+                    },
                     ..default()
                 }),
             )

@@ -4,10 +4,10 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows using chromatic aberration.
 /// This offsets the RGB channels with some magnitude
@@ -54,7 +54,7 @@ impl Default for ChromaticAberration {
     }
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "1c857de0-74e6-42a4-a1b4-0e0f1564a880"]
 struct ChromaticAberrationMaterial {
     #[texture(0)]
@@ -63,6 +63,14 @@ struct ChromaticAberrationMaterial {
 
     #[uniform(2)]
     chromatic_aberration: ChromaticAberration,
+
+    state: EffectState,
+}
+
+impl HasEffectState for ChromaticAberrationMaterial {
+    fn state(&self) -> EffectState {
+        self.state.clone()
+    }
 }
 
 impl Material2d for ChromaticAberrationMaterial {
@@ -71,46 +79,19 @@ impl Material2d for ChromaticAberrationMaterial {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut wave_materials: ResMut<Assets<ChromaticAberrationMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    chromatic_aberration: Res<ChromaticAberration>,
-    images: Res<Assets<Image>>,
-) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
+impl FromWorld for ChromaticAberrationMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let ca = world
+            .get_resource::<ChromaticAberration>()
+            .expect("Chromatic Aberration resource");
 
-    let extent = image.texture_descriptor.size;
-
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = wave_materials.add(ChromaticAberrationMaterial {
-        source_image: image_handle.clone(),
-        chromatic_aberration: *chromatic_aberration,
-    });
-
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
-
-    debug!("OK");
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            chromatic_aberration: *ca,
+            state,
+        }
+    }
 }
 
 fn update_chromatic_aberration(
@@ -137,8 +118,9 @@ impl Plugin for ChromaticAberrationPlugin {
         let _span = debug_span!("ChromaticAberrationPlugin build").entered();
 
         app.init_resource::<ChromaticAberration>()
+            .init_resource::<ChromaticAberrationMaterial>()
             .add_plugin(Material2dPlugin::<ChromaticAberrationMaterial>::default())
-            .add_startup_system(setup)
+            .add_startup_system(setup_effect::<ChromaticAberrationMaterial>)
             .add_system(update_chromatic_aberration);
     }
 }

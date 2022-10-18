@@ -2,10 +2,10 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{quad::window_sized_quad, BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows flipping the rendered scene horizontally and/or vertically.
 /// Add this plugin to the [`App`] in order to use it.
@@ -47,15 +47,23 @@ struct FlipUniform {
     y: f32,
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "70bc3d3b-46e2-40ea-bedc-e0d73ffdd3fd"]
 struct FlipMaterial {
     #[texture(0)]
     #[sampler(1)]
-    source_image: Option<Handle<Image>>,
+    source_image: Handle<Image>,
 
     #[uniform(2)]
     flip: FlipUniform,
+
+    state: EffectState,
+}
+
+impl HasEffectState for FlipMaterial {
+    fn state(&self) -> crate::EffectState {
+        self.state.clone()
+    }
 }
 
 impl Material2d for FlipMaterial {
@@ -64,38 +72,17 @@ impl Material2d for FlipMaterial {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut flip_materials: ResMut<Assets<FlipMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    flip: Res<Flip>,
-    windows: Res<Windows>,
-) {
-    let flip_material = FlipMaterial {
-        source_image: Some(image_handle.clone()),
-        flip: (*flip).into(),
-    };
+impl FromWorld for FlipMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let flip = world.get_resource::<Flip>().expect("Flip resource");
 
-    let material_handle = flip_materials.add(flip_material);
-
-    let mesh = window_sized_quad(windows.primary());
-
-    // Post processing 2d quad, with material using the render texture done by the main camera, with a custom shader.
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: meshes.add(mesh).into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            flip: FlipUniform::from(*flip),
+            state,
+        }
+    }
 }
 
 fn update_flip(mut flip_materials: ResMut<Assets<FlipMaterial>>, flip: Res<Flip>) {
@@ -113,8 +100,9 @@ impl Plugin for FlipPlugin {
         let _span = debug_span!("FlipPlugin build").entered();
 
         app.init_resource::<Flip>()
+            .init_resource::<FlipMaterial>()
             .add_plugin(Material2dPlugin::<FlipMaterial>::default())
-            .add_startup_system(setup)
+            .add_startup_system(setup_effect::<FlipMaterial>)
             .add_system(update_flip);
     }
 }

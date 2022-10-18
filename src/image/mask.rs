@@ -9,10 +9,10 @@ use bevy::{
             AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError,
         },
     },
-    sprite::{Material2d, Material2dKey, Material2dPlugin, MaterialMesh2dBundle},
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{BevyVfxBagImage, BevyVfxBagRenderLayer, ShouldResize};
+use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
 /// This plugin allows adding a mask effect to a texture.
 pub struct MaskPlugin;
@@ -102,7 +102,7 @@ impl From<&MaskMaterial> for MaskVariant {
     }
 }
 
-#[derive(AsBindGroup, TypeUuid, Clone)]
+#[derive(AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "9ca04144-a3e1-40b4-93a7-91424159f612"]
 #[bind_group_data(MaskVariant)]
 struct MaskMaterial {
@@ -114,6 +114,14 @@ struct MaskMaterial {
     strength: f32,
 
     variant: MaskVariant,
+
+    state: EffectState,
+}
+
+impl HasEffectState for MaskMaterial {
+    fn state(&self) -> crate::EffectState {
+        self.state.clone()
+    }
 }
 
 impl Material2d for MaskMaterial {
@@ -142,45 +150,18 @@ impl Material2d for MaskMaterial {
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut mask_materials: ResMut<Assets<MaskMaterial>>,
-    image_handle: Res<BevyVfxBagImage>,
-    render_layer: Res<BevyVfxBagRenderLayer>,
-    mask: Res<Mask>,
-    images: Res<Assets<Image>>,
-) {
-    let image = images
-        .get(&*image_handle)
-        .expect("BevyVfxBagImage should exist");
-    let extent = image.texture_descriptor.size;
+impl FromWorld for MaskMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let state = new_effect_state(world);
+        let mask = world.get_resource::<Mask>().expect("Mask resource");
 
-    let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-        extent.width as f32,
-        extent.height as f32,
-    ))));
-
-    let material_handle = mask_materials.add(MaskMaterial {
-        source_image: image_handle.clone(),
-        strength: mask.strength,
-        variant: mask.variant,
-    });
-
-    // Post processing 2d quad, with material using the render texture done by the main camera, with a custom shader.
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: quad_handle.into(),
-            material: material_handle,
-            transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 1.5),
-                ..default()
-            },
-            ..default()
-        },
-        render_layer.0,
-        ShouldResize,
-    ));
+        Self {
+            source_image: state.input_image_handle.clone_weak(),
+            strength: mask.strength,
+            variant: mask.variant,
+            state,
+        }
+    }
 }
 
 fn update_mask(mut mask_materials: ResMut<Assets<MaskMaterial>>, mask: Res<Mask>) {
@@ -196,8 +177,9 @@ fn update_mask(mut mask_materials: ResMut<Assets<MaskMaterial>>, mask: Res<Mask>
 
 impl Plugin for MaskPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_plugin(Material2dPlugin::<MaskMaterial>::default())
-            .add_startup_system(setup)
+        app.init_resource::<MaskMaterial>()
+            .add_plugin(Material2dPlugin::<MaskMaterial>::default())
+            .add_startup_system(setup_effect::<MaskMaterial>)
             .add_system(update_mask);
     }
 }
