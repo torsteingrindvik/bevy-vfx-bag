@@ -18,3 +18,6 @@ pub mod chromatic_aberration;
 
 /// LUT (look-up texture) color grading.
 pub mod lut;
+
+/// Pixelation effect.
+pub mod pixelate;
