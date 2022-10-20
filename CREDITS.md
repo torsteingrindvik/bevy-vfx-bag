@@ -11,6 +11,6 @@ Videos crucial to some effects in this repo:
 - [Pixelation](https://www.youtube.com/watch?v=x95xhWCxBb4)
 - [Raindrops](https://www.youtube.com/watch?v=Ftpf87brKWg)
 
-## nVidia GPU gems
+## NVIDIA GPU gems
 
 - [Lookup Tables](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-24-using-lookup-tables-accelerate-color)
