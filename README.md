@@ -81,6 +81,13 @@ before and after color grading.
 
 [LUT Example Video](https://user-images.githubusercontent.com/52322338/196005149-a76e6d5b-d227-4e71-9f3f-4e1d86b4d12e.mp4)
 
+### Pixelate
+
+Pixelate the screen.
+The user controls how big the block size of a "pixel" is.
+
+[Pixelate Example Video](https://user-images.githubusercontent.com/52322338/197244451-017846fa-789d-49a7-a622-bc70d5397b4c.mp4)
+
 ### Raindrops
 
 Shows raindrops on the screen.
