@@ -9,6 +9,9 @@ use bevy::{
 
 use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
+const PIXELATE_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12823700631286738286);
+
 /// This plugin allows pixelating the scene.
 /// Add this plugin to the [`App`] in order to use it.
 pub struct PixelatePlugin;
@@ -25,9 +28,7 @@ pub struct Pixelate {
 
 impl Default for Pixelate {
     fn default() -> Self {
-        Self {
-            block_size: 4.0,
-        }
+        Self { block_size: 4.0 }
     }
 }
 
@@ -46,7 +47,11 @@ struct PixelateMaterial {
 
 impl Material2d for PixelateMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/pixelate.wgsl".into()
+        if cfg!(feature = "dev") {
+            "shaders/pixelate.wgsl".into()
+        } else {
+            PIXELATE_SHADER_HANDLE.typed().into()
+        }
     }
 }
 
@@ -69,7 +74,10 @@ impl FromWorld for PixelateMaterial {
     }
 }
 
-fn update_pixelate(mut pixelate_materials: ResMut<Assets<PixelateMaterial>>, pixelate: Res<Pixelate>) {
+fn update_pixelate(
+    mut pixelate_materials: ResMut<Assets<PixelateMaterial>>,
+    pixelate: Res<Pixelate>,
+) {
     if !pixelate.is_changed() {
         return;
     }
@@ -82,6 +90,16 @@ fn update_pixelate(mut pixelate_materials: ResMut<Assets<PixelateMaterial>>, pix
 impl Plugin for PixelatePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("PixelatePlugin build").entered();
+
+        if !cfg!(feature = "dev") {
+            use bevy::asset::load_internal_asset;
+            load_internal_asset!(
+                app,
+                PIXELATE_SHADER_HANDLE,
+                "../../assets/shaders/pixelate.wgsl",
+                Shader::from_wgsl
+            );
+        }
 
         app.init_resource::<Pixelate>()
             .init_resource::<PixelateMaterial>()

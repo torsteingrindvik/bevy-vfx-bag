@@ -7,6 +7,9 @@ use bevy::{
 
 use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
 
+const BLUR_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 14860840837524393207);
+
 /// This plugin allows blurring the scene.
 /// Add this plugin to the [`App`] in order to use it.
 pub struct BlurPlugin;
@@ -49,7 +52,11 @@ struct BlurMaterial {
 
 impl Material2d for BlurMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/blur.wgsl".into()
+        if cfg!(feature = "dev") {
+            "shaders/blur.wgsl".into()
+        } else {
+            BLUR_SHADER_HANDLE.typed().into()
+        }
     }
 }
 
@@ -85,6 +92,16 @@ fn update_blur(mut blur_materials: ResMut<Assets<BlurMaterial>>, blur: Res<Blur>
 impl Plugin for BlurPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("BlurPlugin build").entered();
+
+        if !cfg!(feature = "dev") {
+            use bevy::asset::load_internal_asset;
+            load_internal_asset!(
+                app,
+                BLUR_SHADER_HANDLE,
+                "../../assets/shaders/blur.wgsl",
+                Shader::from_wgsl
+            );
+        }
 
         app.init_resource::<Blur>()
             .init_resource::<BlurMaterial>()
