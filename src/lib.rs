@@ -165,6 +165,19 @@ macro_rules! shader_ref {
     }};
 }
 
+/// Load an asset with the given handle
+/// and relative (to callee source file) path
+/// if the "dev" feature is not on.
+#[macro_export]
+macro_rules! load_asset_if_no_dev_feature {
+    ($app: ident, $handle: ident, $path_str: expr) => {{
+        if !cfg!(feature = "dev") {
+            use bevy::asset::load_internal_asset;
+            load_internal_asset!($app, $handle, $path_str, Shader::from_wgsl);
+        }
+    }};
+}
+
 fn new_effect_state(world: &mut World) -> EffectState {
     let mut state = world
         .get_resource_mut::<BevyVfxBagState>()

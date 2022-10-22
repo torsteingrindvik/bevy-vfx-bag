@@ -7,7 +7,10 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
 
 const PIXELATE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12823700631286738286);
@@ -87,15 +90,11 @@ impl Plugin for PixelatePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("PixelatePlugin build").entered();
 
-        if !cfg!(feature = "dev") {
-            use bevy::asset::load_internal_asset;
-            load_internal_asset!(
-                app,
-                PIXELATE_SHADER_HANDLE,
-                "../../assets/shaders/pixelate.wgsl",
-                Shader::from_wgsl
-            );
-        }
+        load_asset_if_no_dev_feature!(
+            app,
+            PIXELATE_SHADER_HANDLE,
+            "../../assets/shaders/pixelate.wgsl"
+        );
 
         app.init_resource::<Pixelate>()
             .init_resource::<PixelateMaterial>()

@@ -29,7 +29,9 @@ use bevy::{
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, EffectState, HasEffectState,
+};
 
 const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 182690283339630534);
@@ -255,15 +257,7 @@ impl Plugin for LutPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("LUT build").entered();
 
-        if !cfg!(feature = "dev") {
-            use bevy::asset::load_internal_asset;
-            load_internal_asset!(
-                app,
-                LUT_SHADER_HANDLE,
-                "../../../assets/shaders/lut.wgsl",
-                Shader::from_wgsl
-            );
-        }
+        load_asset_if_no_dev_feature!(app, LUT_SHADER_HANDLE, "../../../assets/shaders/lut.wgsl");
 
         app
             // Initialize the fallback neutral LUT in case the user

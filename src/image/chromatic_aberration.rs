@@ -7,7 +7,10 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
 
 const CHROMATIC_ABERRATION_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 9124131622872249345);
@@ -123,15 +126,11 @@ impl Plugin for ChromaticAberrationPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("ChromaticAberrationPlugin build").entered();
 
-        if !cfg!(feature = "dev") {
-            use bevy::asset::load_internal_asset;
-            load_internal_asset!(
-                app,
-                CHROMATIC_ABERRATION_SHADER_HANDLE,
-                "../../assets/shaders/chromatic-aberration.wgsl",
-                Shader::from_wgsl
-            );
-        }
+        load_asset_if_no_dev_feature!(
+            app,
+            CHROMATIC_ABERRATION_SHADER_HANDLE,
+            "../../assets/shaders/chromatic-aberration.wgsl"
+        );
 
         app.init_resource::<ChromaticAberration>()
             .init_resource::<ChromaticAberrationMaterial>()

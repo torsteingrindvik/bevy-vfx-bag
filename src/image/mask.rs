@@ -12,7 +12,10 @@ use bevy::{
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
 
 const MASKS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12949814029375825065);
@@ -182,15 +185,7 @@ impl Plugin for MaskPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("MaskPlugin build").entered();
 
-        if !cfg!(feature = "dev") {
-            use bevy::asset::load_internal_asset;
-            load_internal_asset!(
-                app,
-                MASKS_SHADER_HANDLE,
-                "../../assets/shaders/masks.wgsl",
-                Shader::from_wgsl
-            );
-        }
+        load_asset_if_no_dev_feature!(app, MASKS_SHADER_HANDLE, "../../assets/shaders/masks.wgsl");
 
         app.init_resource::<MaskMaterial>()
             .add_plugin(Material2dPlugin::<MaskMaterial>::default())
