@@ -13,7 +13,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const RAINDROPS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 5536809487310763617);
@@ -70,11 +70,7 @@ impl HasEffectState for RaindropsMaterial {
 
 impl Material2d for RaindropsMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/raindrops.wgsl".into()
-        } else {
-            RAINDROPS_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops.wgsl")
     }
 }
 

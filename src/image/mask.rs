@@ -12,7 +12,7 @@ use bevy::{
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const MASKS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12949814029375825065);
@@ -129,11 +129,7 @@ impl HasEffectState for MaskMaterial {
 
 impl Material2d for MaskMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/masks.wgsl".into()
-        } else {
-            MASKS_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(MASKS_SHADER_HANDLE, "shaders/masks.wgsl")
     }
 
     fn specialize(

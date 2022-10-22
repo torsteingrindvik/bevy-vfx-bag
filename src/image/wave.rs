@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const WAVE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1792660281364049744);
@@ -63,11 +63,7 @@ impl HasEffectState for WaveMaterial {
 
 impl Material2d for WaveMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/wave.wgsl".into()
-        } else {
-            WAVE_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(WAVE_SHADER_HANDLE, "shaders/wave.wgsl")
     }
 }
 

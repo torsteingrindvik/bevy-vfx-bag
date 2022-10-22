@@ -7,7 +7,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const PIXELATE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12823700631286738286);
@@ -47,11 +47,7 @@ struct PixelateMaterial {
 
 impl Material2d for PixelateMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/pixelate.wgsl".into()
-        } else {
-            PIXELATE_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(PIXELATE_SHADER_HANDLE, "shaders/pixelate.wgsl")
     }
 }
 

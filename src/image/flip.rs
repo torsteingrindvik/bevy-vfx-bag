@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const FLIP_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 6628355331557851282);
@@ -71,11 +71,7 @@ impl HasEffectState for FlipMaterial {
 
 impl Material2d for FlipMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/flip.wgsl".into()
-        } else {
-            FLIP_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip.wgsl")
     }
 }
 

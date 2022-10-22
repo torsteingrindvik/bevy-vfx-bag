@@ -148,6 +148,23 @@ impl FromWorld for BevyVfxBagState {
 /// systems which other plugins in this crate rely on.
 pub struct BevyVfxBagPlugin;
 
+/// Macro for selecting a way to load shaders
+/// based on the "dev" feature.
+/// If the feature is on, we load from an assets-relative
+/// path. Suitable for hot-reloading.
+/// Else, the shader is loaded via the handle.
+/// Suitable when this crate is used as a dependency.
+#[macro_export]
+macro_rules! shader_ref {
+    ($handle: ident, $path_str: expr) => {{
+        if cfg!(feature = "dev") {
+            $path_str.into()
+        } else {
+            $handle.typed().into()
+        }
+    }};
+}
+
 fn new_effect_state(world: &mut World) -> EffectState {
     let mut state = world
         .get_resource_mut::<BevyVfxBagState>()

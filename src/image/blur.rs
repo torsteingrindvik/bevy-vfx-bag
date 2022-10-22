@@ -5,7 +5,7 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{new_effect_state, setup_effect, shader_ref, EffectState, HasEffectState};
 
 const BLUR_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 14860840837524393207);
@@ -52,11 +52,7 @@ struct BlurMaterial {
 
 impl Material2d for BlurMaterial {
     fn fragment_shader() -> ShaderRef {
-        if cfg!(feature = "dev") {
-            "shaders/blur.wgsl".into()
-        } else {
-            BLUR_SHADER_HANDLE.typed().into()
-        }
+        shader_ref!(BLUR_SHADER_HANDLE, "shaders/blur.wgsl")
     }
 }
 
