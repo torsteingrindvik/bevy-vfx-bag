@@ -7,7 +7,13 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
+
+const CHROMATIC_ABERRATION_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 9124131622872249345);
 
 /// This plugin allows using chromatic aberration.
 /// This offsets the RGB channels with some magnitude
@@ -75,7 +81,10 @@ impl HasEffectState for ChromaticAberrationMaterial {
 
 impl Material2d for ChromaticAberrationMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/chromatic-aberration.wgsl".into()
+        shader_ref!(
+            CHROMATIC_ABERRATION_SHADER_HANDLE,
+            "shaders/chromatic_aberration.wgsl"
+        )
     }
 }
 
@@ -116,6 +125,12 @@ fn update_chromatic_aberration(
 impl Plugin for ChromaticAberrationPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("ChromaticAberrationPlugin build").entered();
+
+        load_asset_if_no_dev_feature!(
+            app,
+            CHROMATIC_ABERRATION_SHADER_HANDLE,
+            "../../assets/shaders/chromatic-aberration.wgsl"
+        );
 
         app.init_resource::<ChromaticAberration>()
             .init_resource::<ChromaticAberrationMaterial>()

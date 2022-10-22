@@ -3,9 +3,14 @@ name = "bevy-vfx-bag"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# For local development.
+# Shaders can now be hot-reloaded.
+dev = []
+
 [dependencies]
+# TODO: Find which crates of bevy is needed
 bevy = { path = "../bevy", features = ["tga"] }
-bytemuck = "1.12.1"
 
 [dev-dependencies]
 color-eyre = "0.6"

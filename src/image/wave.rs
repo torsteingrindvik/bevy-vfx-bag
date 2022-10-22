@@ -5,7 +5,13 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
+
+const WAVE_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1792660281364049744);
 
 /// This plugin allows creating a wave across the image.
 /// A wave can be customized in the X and Y axes for interesting effects.
@@ -60,7 +66,7 @@ impl HasEffectState for WaveMaterial {
 
 impl Material2d for WaveMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/wave.wgsl".into()
+        shader_ref!(WAVE_SHADER_HANDLE, "shaders/wave.wgsl")
     }
 }
 
@@ -90,6 +96,8 @@ fn update_wave(mut wave_materials: ResMut<Assets<WaveMaterial>>, wave: Res<Wave>
 impl Plugin for WavePlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("WavePlugin build").entered();
+
+        load_asset_if_no_dev_feature!(app, WAVE_SHADER_HANDLE, "../../assets/shaders/wave.wgsl");
 
         app.init_resource::<Wave>()
             .init_resource::<WaveMaterial>()

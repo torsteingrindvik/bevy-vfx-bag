@@ -5,7 +5,13 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
+
+const FLIP_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 6628355331557851282);
 
 /// This plugin allows flipping the rendered scene horizontally and/or vertically.
 /// Add this plugin to the [`App`] in order to use it.
@@ -68,7 +74,7 @@ impl HasEffectState for FlipMaterial {
 
 impl Material2d for FlipMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/flip.wgsl".into()
+        shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip.wgsl")
     }
 }
 
@@ -98,6 +104,8 @@ fn update_flip(mut flip_materials: ResMut<Assets<FlipMaterial>>, flip: Res<Flip>
 impl Plugin for FlipPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("FlipPlugin build").entered();
+
+        load_asset_if_no_dev_feature!(app, FLIP_SHADER_HANDLE, "../../assets/shaders/flip.wgsl");
 
         app.init_resource::<Flip>()
             .init_resource::<FlipMaterial>()

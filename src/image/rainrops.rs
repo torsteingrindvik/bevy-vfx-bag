@@ -13,7 +13,13 @@ use bevy::{
     sprite::{Material2d, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
+
+const RAINDROPS_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 5536809487310763617);
 
 /// This plugin allows adding raindrops to an image.
 pub struct RaindropsPlugin;
@@ -67,7 +73,7 @@ impl HasEffectState for RaindropsMaterial {
 
 impl Material2d for RaindropsMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/raindrops.wgsl".into()
+        shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops.wgsl")
     }
 }
 
@@ -172,6 +178,12 @@ fn fixup_texture(
 impl Plugin for RaindropsPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("RaindropsPlugin build").entered();
+
+        load_asset_if_no_dev_feature!(
+            app,
+            RAINDROPS_SHADER_HANDLE,
+            "../../assets/shaders/raindrops.wgsl"
+        );
 
         app.init_resource::<Raindrops>()
             .init_resource::<RaindropsImage>()

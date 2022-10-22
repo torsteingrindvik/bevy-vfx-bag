@@ -29,7 +29,12 @@ use bevy::{
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, EffectState, HasEffectState,
+};
+
+const LUT_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 182690283339630534);
 
 /// This plugin allows using look-up textures for color grading.
 pub struct LutPlugin;
@@ -183,7 +188,11 @@ impl HasEffectState for LutMaterial {
 
 impl Material2d for LutMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/lut.wgsl".into()
+        if cfg!(feature = "dev") {
+            "shaders/lut.wgsl".into()
+        } else {
+            LUT_SHADER_HANDLE.typed().into()
+        }
     }
 
     fn specialize(
@@ -247,6 +256,8 @@ fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
 impl Plugin for LutPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("LUT build").entered();
+
+        load_asset_if_no_dev_feature!(app, LUT_SHADER_HANDLE, "../../../assets/shaders/lut.wgsl");
 
         app
             // Initialize the fallback neutral LUT in case the user

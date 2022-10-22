@@ -12,7 +12,13 @@ use bevy::{
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
-use crate::{new_effect_state, setup_effect, EffectState, HasEffectState};
+use crate::{
+    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
+    HasEffectState,
+};
+
+const MASKS_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12949814029375825065);
 
 /// This plugin allows adding a mask effect to a texture.
 pub struct MaskPlugin;
@@ -126,7 +132,7 @@ impl HasEffectState for MaskMaterial {
 
 impl Material2d for MaskMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/masks.wgsl".into()
+        shader_ref!(MASKS_SHADER_HANDLE, "shaders/masks.wgsl")
     }
 
     fn specialize(
@@ -177,6 +183,10 @@ fn update_mask(mut mask_materials: ResMut<Assets<MaskMaterial>>, mask: Res<Mask>
 
 impl Plugin for MaskPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
+        let _span = debug_span!("MaskPlugin build").entered();
+
+        load_asset_if_no_dev_feature!(app, MASKS_SHADER_HANDLE, "../../assets/shaders/masks.wgsl");
+
         app.init_resource::<MaskMaterial>()
             .add_plugin(Material2dPlugin::<MaskMaterial>::default())
             .add_startup_system(setup_effect::<MaskMaterial>)
