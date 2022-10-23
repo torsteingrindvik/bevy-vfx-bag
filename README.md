@@ -4,6 +4,18 @@ This crate has an assortment of effects easily applied to Bevy apps via plugins.
 
 ## Getting started
 
+### Bevy compatibility
+
+When adding this crate as a dependency in your project,
+the Bevy version you use will need to match up according to the
+following table:
+
+|bevy-vfx-bag|bevy|
+|---|---|
+|0.1 (unreleased)|0.9 (unreleased)|
+
+### In your code
+
 The general strategy is:
 
 * Add the main plugin: `BevyVfxBagPlugin`.
