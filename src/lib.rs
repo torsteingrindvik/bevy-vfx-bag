@@ -4,8 +4,10 @@
 #![doc = include_str!("../README.md")]
 
 use bevy::{
+    asset::load_internal_asset,
     core_pipeline::clear_color::ClearColorConfig,
     prelude::{App, *},
+    reflect::TypeUuid,
     render::{
         camera::RenderTarget,
         render_resource::{
@@ -19,6 +21,9 @@ use bevy::{
 };
 
 use crate::quad::window_sized_quad;
+
+const PASSTHROUGH_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12989973502425583956);
 
 /// Effects which are added to an image.
 /// This image might be the output of a render pass of an app.
@@ -327,6 +332,13 @@ fn setup_post_processing_2d_cameras(
 
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            PASSTHROUGH_SHADER_HANDLE,
+            "passthrough.wgsl",
+            Shader::from_wgsl
+        );
+
         app.init_resource::<BevyVfxBagState>()
             .add_startup_system_to_stage(StartupStage::PostStartup, setup_post_processing_input)
             .add_startup_system_to_stage(

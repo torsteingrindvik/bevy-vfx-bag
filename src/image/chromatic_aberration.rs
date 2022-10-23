@@ -83,7 +83,7 @@ impl Material2d for ChromaticAberrationMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(
             CHROMATIC_ABERRATION_SHADER_HANDLE,
-            "shaders/chromatic_aberration.wgsl"
+            "shaders/chromatic-aberration.wgsl"
         )
     }
 }

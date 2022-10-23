@@ -3,8 +3,14 @@
 use bevy::{
     prelude::*,
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin},
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderRef, ShaderType,
+            SpecializedMeshPipelineError,
+        },
+    },
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
 use crate::{
@@ -35,8 +41,20 @@ impl Default for Pixelate {
     }
 }
 
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct PixelatePassthrough(pub bool);
+
+impl From<&PixelateMaterial> for PixelatePassthrough {
+    fn from(material: &PixelateMaterial) -> Self {
+        Self(material.passthrough)
+    }
+}
+
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "6370db4a-50ad-11ed-9fb9-3fa3e5f909b7"]
+#[bind_group_data(PixelatePassthrough)]
 struct PixelateMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -46,11 +64,30 @@ struct PixelateMaterial {
     pixelate: Pixelate,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl Material2d for PixelateMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(PIXELATE_SHADER_HANDLE, "shaders/pixelate.wgsl")
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        if key.bind_group_data.0 {
+            descriptor
+                .fragment
+                .as_mut()
+                .expect("Should have fragment state")
+                .shader_defs
+                .push("PASSTHROUGH".into());
+        }
+
+        Ok(())
     }
 }
 
@@ -69,6 +106,7 @@ impl FromWorld for PixelateMaterial {
             source_image: state.input_image_handle.clone_weak(),
             state,
             pixelate: *pixelate,
+            passthrough: false,
         }
     }
 }
@@ -76,13 +114,15 @@ impl FromWorld for PixelateMaterial {
 fn update_pixelate(
     mut pixelate_materials: ResMut<Assets<PixelateMaterial>>,
     pixelate: Res<Pixelate>,
+    passthrough: Res<PixelatePassthrough>,
 ) {
-    if !pixelate.is_changed() {
+    if !pixelate.is_changed() && !passthrough.is_changed() {
         return;
     }
 
     for (_, material) in pixelate_materials.iter_mut() {
         material.pixelate = *pixelate;
+        material.passthrough = passthrough.0;
     }
 }
 
@@ -98,6 +138,7 @@ impl Plugin for PixelatePlugin {
 
         app.init_resource::<Pixelate>()
             .init_resource::<PixelateMaterial>()
+            .init_resource::<PixelatePassthrough>()
             .add_plugin(Material2dPlugin::<PixelateMaterial>::default())
             .add_startup_system(setup_effect::<PixelateMaterial>)
             .add_system(update_pixelate);
