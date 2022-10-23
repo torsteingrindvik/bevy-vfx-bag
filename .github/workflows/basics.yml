@@ -22,6 +22,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+          args: --all-targets
 
   check-dev:
     name: Check dev
@@ -38,7 +39,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --features dev
+          args: --all-targets --features dev
 
   test:
     name: Test Suite

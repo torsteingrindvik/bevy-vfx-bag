@@ -30,6 +30,7 @@ dev = []
 # bevy = { path = "../bevy", features = ["tga"] }
 bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
 
+# TODO: Remove this section when alsa semver issue is fixed
 [target.'cfg(unix)'.dependencies]
 alsa = "=0.6.0"
 
