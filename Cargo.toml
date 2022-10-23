@@ -1,7 +1,12 @@
 [package]
 name = "bevy-vfx-bag"
-version = "0.1.0"
+version = "0.1.0-dev"
 edition = "2021"
+categories = ["graphics", "game-development", "rendering"]
+keywords = ["game", "graphics", "bevy", "gamedev", "wgsl", "shaders", "effects"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/torsteingrindvik/bevy-vfx-bag"
 
 [features]
 # For local development.
