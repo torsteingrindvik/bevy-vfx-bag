@@ -4,7 +4,8 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy_vfx_bag::{
-    BevyVfxBagPlugin, PostProcessingInput, image::pixelate::{PixelatePlugin, Pixelate},
+    image::pixelate::{Pixelate, PixelatePlugin},
+    BevyVfxBagPlugin, PostProcessingInput,
 };
 
 fn main() {
@@ -45,8 +46,5 @@ fn update(
     pixelate.block_size += pixelate_diff;
     pixelate.block_size = 1.0_f32.max(pixelate.block_size);
 
-    text.0 = format!(
-        "Pixelate block size (↑↓): {:.2?}",
-        pixelate.block_size
-    );
+    text.0 = format!("Pixelate block size (↑↓): {:.2?}", pixelate.block_size);
 }
