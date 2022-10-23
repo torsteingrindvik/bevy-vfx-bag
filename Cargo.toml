@@ -27,7 +27,8 @@ dev = []
 
 [dependencies]
 # TODO: Find which crates of bevy is needed
-bevy = { path = "../bevy", features = ["tga"] }
+# bevy = { path = "../bevy", features = ["tga"] }
+bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
 
 [dev-dependencies]
 color-eyre = "0.6"
