@@ -1,13 +1,19 @@
 use bevy::{
     prelude::*,
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin},
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderRef, ShaderType,
+            SpecializedMeshPipelineError,
+        },
+    },
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const FLIP_SHADER_HANDLE: HandleUntyped =
@@ -53,8 +59,26 @@ struct FlipUniform {
     y: f32,
 }
 
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct FlipPassthrough(pub bool);
+
+impl Passthrough for FlipPassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<&FlipMaterial> for FlipPassthrough {
+    fn from(material: &FlipMaterial) -> Self {
+        Self(material.passthrough)
+    }
+}
+
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "70bc3d3b-46e2-40ea-bedc-e0d73ffdd3fd"]
+#[bind_group_data(FlipPassthrough)]
 struct FlipMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -64,6 +88,8 @@ struct FlipMaterial {
     flip: FlipUniform,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for FlipMaterial {
@@ -76,6 +102,16 @@ impl Material2d for FlipMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip.wgsl")
     }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
+        Ok(())
+    }
 }
 
 impl FromWorld for FlipMaterial {
@@ -87,6 +123,7 @@ impl FromWorld for FlipMaterial {
             source_image: state.input_image_handle.clone_weak(),
             flip: FlipUniform::from(*flip),
             state,
+            passthrough: false,
         }
     }
 }
@@ -109,6 +146,7 @@ impl Plugin for FlipPlugin {
 
         app.init_resource::<Flip>()
             .init_resource::<FlipMaterial>()
+            .init_resource::<FlipPassthrough>()
             .add_plugin(Material2dPlugin::<FlipMaterial>::default())
             .add_startup_system(setup_effect::<FlipMaterial>)
             .add_system(update_flip);

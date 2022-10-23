@@ -11,12 +11,13 @@ use bevy::{
     render::{
         camera::RenderTarget,
         render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+            Extent3d, RenderPipelineDescriptor, TextureDescriptor, TextureDimension, TextureFormat,
+            TextureUsages,
         },
         texture::BevyDefault,
         view::RenderLayers,
     },
-    sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
+    sprite::{Material2d, Material2dKey, MaterialMesh2dBundle, Mesh2dHandle},
     window::WindowResized,
 };
 
@@ -210,6 +211,25 @@ struct EffectState {
 
 trait HasEffectState {
     fn state(&self) -> EffectState;
+}
+
+trait Passthrough {
+    fn passthrough(&self) -> bool;
+}
+
+fn passthrough<T>(descriptor: &mut RenderPipelineDescriptor, key: &Material2dKey<T>)
+where
+    T: Material2d,
+    T::Data: Passthrough,
+{
+    if key.bind_group_data.passthrough() {
+        descriptor
+            .fragment
+            .as_mut()
+            .expect("Should have fragment state")
+            .shader_defs
+            .push("PASSTHROUGH".into());
+    }
 }
 
 pub(crate) fn setup_effect<M>(

@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::{prelude::*, utils::HashMap};
 
 use bevy_vfx_bag::{
-    image::lut::{Lut, Lut3d, LutPlugin},
+    image::lut::{Lut, Lut3d, LutPassthrough, LutPlugin},
     BevyVfxBagPlugin, PostProcessingInput,
 };
 
@@ -81,10 +81,15 @@ fn update(
     mut text: ResMut<examples_common::ExampleText>,
     luts_state: Res<LutsState>,
     keyboard_input: Res<Input<KeyCode>>,
+    mut passthrough: ResMut<LutPassthrough>,
 ) {
     let num_luts = luts_state.ready.len();
     if num_luts == 0 {
         return;
+    }
+
+    if keyboard_input.just_pressed(KeyCode::P) {
+        passthrough.0 = !passthrough.0;
     }
 
     if keyboard_input.just_pressed(KeyCode::S) {
@@ -101,8 +106,9 @@ fn update(
     }
 
     text.0 = format!(
-        "LUT {}/{num_luts}: {name}, [S]plit: {:?}",
+        "LUT {}/{num_luts}: {name}, [S]plit: {:?}, [P]assthrough: {:?}",
         *choice + 1,
         lut.split_vertically,
+        passthrough.0
     );
 }

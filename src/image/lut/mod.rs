@@ -30,7 +30,8 @@ use bevy::{
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, EffectState, HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, EffectState,
+    HasEffectState, Passthrough,
 };
 
 const LUT_SHADER_HANDLE: HandleUntyped =
@@ -178,6 +179,8 @@ struct LutMaterial {
     lut: Lut,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for LutMaterial {
@@ -200,6 +203,8 @@ impl Material2d for LutMaterial {
         _layout: &MeshVertexBufferLayout,
         key: Material2dKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
         let mut push_def = |def: &str| {
             descriptor
                 .fragment
@@ -226,6 +231,7 @@ impl FromWorld for LutMaterial {
             source_image: state.input_image_handle.clone_weak(),
             state,
             lut: lut.clone(),
+            passthrough: false,
         }
     }
 }
@@ -233,23 +239,49 @@ impl FromWorld for LutMaterial {
 #[derive(Eq, PartialEq, Hash, Clone)]
 struct LutMaterialKey {
     split_vertically: bool,
+    passthrough: bool,
+}
+
+impl Passthrough for LutMaterialKey {
+    fn passthrough(&self) -> bool {
+        self.passthrough
+    }
+}
+
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct LutPassthrough(pub bool);
+
+impl Passthrough for LutPassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
 }
 
 impl From<&LutMaterial> for LutMaterialKey {
     fn from(lut_material: &LutMaterial) -> Self {
         Self {
             split_vertically: lut_material.lut.split_vertically,
+            passthrough: lut_material.passthrough,
         }
     }
 }
 
-fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
-    if !lut.is_changed() {
+fn update_lut(
+    mut lut_materials: ResMut<Assets<LutMaterial>>,
+    lut: Res<Lut>,
+    passthrough: Res<LutPassthrough>,
+) {
+    if !lut.is_changed() && !passthrough.is_changed() {
         return;
     }
 
+    info!("Changed something: {passthrough:?}");
+
     for (_, material) in lut_materials.iter_mut() {
-        material.lut = lut.clone()
+        material.lut = lut.clone();
+        material.passthrough = passthrough.0;
     }
 }
 
@@ -266,6 +298,7 @@ impl Plugin for LutPlugin {
             // Now initialize [`Lut`], which will then use [`LutNeutral`] if it must.
             .init_resource::<Lut>()
             .init_resource::<LutMaterial>()
+            .init_resource::<LutPassthrough>()
             .add_plugin(Material2dPlugin::<LutMaterial>::default())
             .add_startup_system(setup_effect::<LutMaterial>)
             .add_system(update_lut);

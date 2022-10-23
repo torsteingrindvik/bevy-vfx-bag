@@ -13,8 +13,8 @@ use bevy::{
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const MASKS_SHADER_HANDLE: HandleUntyped =
@@ -102,15 +102,35 @@ impl Mask {
     }
 }
 
-impl From<&MaskMaterial> for MaskVariant {
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct MaskKey {
+    variant: MaskVariant,
+    passthrough: bool,
+}
+
+impl Passthrough for MaskKey {
+    fn passthrough(&self) -> bool {
+        self.passthrough
+    }
+}
+
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct MaskPassthrough(pub bool);
+
+impl From<&MaskMaterial> for MaskKey {
     fn from(mask_material: &MaskMaterial) -> Self {
-        mask_material.variant
+        Self {
+            variant: mask_material.variant,
+            passthrough: mask_material.passthrough,
+        }
     }
 }
 
 #[derive(AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "9ca04144-a3e1-40b4-93a7-91424159f612"]
-#[bind_group_data(MaskVariant)]
+#[bind_group_data(MaskKey)]
 struct MaskMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -122,6 +142,8 @@ struct MaskMaterial {
     variant: MaskVariant,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for MaskMaterial {
@@ -140,7 +162,9 @@ impl Material2d for MaskMaterial {
         _layout: &MeshVertexBufferLayout,
         key: Material2dKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        let def = match key.bind_group_data {
+        passthrough(descriptor, &key);
+
+        let def = match key.bind_group_data.variant {
             MaskVariant::Square => "SQUARE",
             MaskVariant::Crt => "CRT",
             MaskVariant::Vignette => "VIGNETTE",
@@ -166,12 +190,17 @@ impl FromWorld for MaskMaterial {
             strength: mask.strength,
             variant: mask.variant,
             state,
+            passthrough: false,
         }
     }
 }
 
-fn update_mask(mut mask_materials: ResMut<Assets<MaskMaterial>>, mask: Res<Mask>) {
-    if !mask.is_changed() {
+fn update_mask(
+    mut mask_materials: ResMut<Assets<MaskMaterial>>,
+    mask: Res<Mask>,
+    passthrough: Res<MaskPassthrough>,
+) {
+    if !mask.is_changed() && !passthrough.is_changed() {
         return;
     }
 
@@ -188,6 +217,7 @@ impl Plugin for MaskPlugin {
         load_asset_if_no_dev_feature!(app, MASKS_SHADER_HANDLE, "../../assets/shaders/masks.wgsl");
 
         app.init_resource::<MaskMaterial>()
+            .init_resource::<MaskPassthrough>()
             .add_plugin(Material2dPlugin::<MaskMaterial>::default())
             .add_startup_system(setup_effect::<MaskMaterial>)
             .add_system(update_mask);

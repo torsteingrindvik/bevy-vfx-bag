@@ -53,6 +53,6 @@ fn update(
 
     text.0 = format!(
         "Pixelate block size (↑↓): {:.2?}, [P]assthrough: {:?}",
-        pixelate.block_size, passthrough
+        pixelate.block_size, passthrough.0
     );
 }

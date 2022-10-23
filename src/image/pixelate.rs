@@ -14,8 +14,8 @@ use bevy::{
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const PIXELATE_SHADER_HANDLE: HandleUntyped =
@@ -45,6 +45,12 @@ impl Default for Pixelate {
 /// pass through the input image.
 #[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
 pub struct PixelatePassthrough(pub bool);
+
+impl Passthrough for PixelatePassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
+}
 
 impl From<&PixelateMaterial> for PixelatePassthrough {
     fn from(material: &PixelateMaterial) -> Self {
@@ -78,14 +84,7 @@ impl Material2d for PixelateMaterial {
         _layout: &MeshVertexBufferLayout,
         key: Material2dKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        if key.bind_group_data.0 {
-            descriptor
-                .fragment
-                .as_mut()
-                .expect("Should have fragment state")
-                .shader_defs
-                .push("PASSTHROUGH".into());
-        }
+        passthrough(descriptor, &key);
 
         Ok(())
     }
