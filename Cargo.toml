@@ -30,6 +30,9 @@ dev = []
 # bevy = { path = "../bevy", features = ["tga"] }
 bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
 
+[target.'cfg(unix)'.dependencies]
+alsa = "=0.6.0"
+
 [dev-dependencies]
 color-eyre = "0.6"
 image = "0.24"
