@@ -91,7 +91,7 @@ fn update(
         lut.split_vertically = !lut.split_vertically;
     }
 
-    let choice_now = time.seconds_since_startup() as usize % num_luts;
+    let choice_now = time.elapsed_seconds() as usize % num_luts;
 
     let (name, lut3d) = &luts_state.ready[choice_now];
 

@@ -50,7 +50,7 @@ fn update(
     chromatic_aberration.magnitude_g = magnitude;
     chromatic_aberration.magnitude_b = magnitude;
 
-    let t = time.seconds_since_startup_wrapped_f32();
+    let t = time.elapsed_seconds();
 
     chromatic_aberration.dir_r = Vec2::from_angle(t);
     chromatic_aberration.dir_g = Vec2::from_angle(2. * t);
