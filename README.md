@@ -1,7 +1,22 @@
 # Bevy Visual Effects Bag
 
 This crate has an assortment of effects easily applied to Bevy apps via plugins.
-Scroll down to see example videos of the various effects.
+
+Here is a showcase made by adding some visual effects to Bevy's breakout example.
+Note that the game itself is not modified except visually.
+
+[Breakout Video](https://user-images.githubusercontent.com/52322338/198832540-a1a2fa00-8c75-4f55-a3e7-b4ce18fef958.mp4)
+
+The effects added in the above are:
+
+- A raindrop effect (due to effects applied after this one it gives the impression of static noise across the screen).
+- Chromatic aberration.
+- Waves. This effect causes the general "waviness" seen as well as the collision shake effect.
+- A CRT mask. This changes the edges of the screen to resemeble a CRT.
+- Pixelation. This pixelates the image. The demo increases this effect slightly each time a collision happens, but it's a bit hard to notice due to the short length of the video.
+- Color grading. A color lookup texture is applied, which changes the color output accordingly.
+
+Scroll down to see videos of the examples in contained in this repo.
 
 ## Bevy compatibility
 
@@ -55,7 +70,7 @@ fn update(mut flip: ResMut<Flip>) {
 
 ## Examples
 
-All videos are captured from running the [examples](https://github.com/torsteingrindvik/bevy-vfx-bag/tree/main/examples).
+All videos below are captured from running the [examples](https://github.com/torsteingrindvik/bevy-vfx-bag/tree/main/examples).
 
 Do `cargo r --example` in this repository to get a list of examples you may run.
 Some examples use keyboard/mouse input to change parameters at runtime as well.
