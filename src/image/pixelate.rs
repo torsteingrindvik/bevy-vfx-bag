@@ -25,7 +25,7 @@ const PIXELATE_SHADER_HANDLE: HandleUntyped =
 /// Add this plugin to the [`App`] in order to use it.
 pub struct PixelatePlugin;
 
-/// Blur parameters.
+/// Pixelation parameters.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Pixelate {
     /// How many pixels in the width and height in a block after pixelation.

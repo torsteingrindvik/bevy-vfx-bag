@@ -26,7 +26,7 @@ const RAINDROPS_SHADER_HANDLE: HandleUntyped =
 /// This plugin allows adding raindrops to an image.
 pub struct RaindropsPlugin;
 
-/// Blur parameters.
+/// Raindrop effect parameters.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Raindrops {
     /// How fast the drops animate on screen.

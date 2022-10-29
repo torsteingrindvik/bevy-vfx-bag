@@ -31,7 +31,7 @@ const PASSTHROUGH_SHADER_HANDLE: HandleUntyped =
 pub mod image;
 
 /// Helpers for making quads.
-pub mod quad;
+mod quad;
 
 /// For post processing effects to work, this marker should be added to a camera.
 /// This camera will be changed to render to an image buffer which will then be applied
@@ -160,6 +160,7 @@ pub struct BevyVfxBagPlugin;
 /// path. Suitable for hot-reloading.
 /// Else, the shader is loaded via the handle.
 /// Suitable when this crate is used as a dependency.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! shader_ref {
     ($handle: ident, $path_str: expr) => {{
@@ -174,6 +175,7 @@ macro_rules! shader_ref {
 /// Load an asset with the given handle
 /// and relative (to callee source file) path
 /// if the "dev" feature is not on.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! load_asset_if_no_dev_feature {
     ($app: ident, $handle: ident, $path_str: expr) => {{
