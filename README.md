@@ -128,6 +128,14 @@ Not shown is changing the radius, and changing the color of the vignette.
 
 [Vignette Example Video](https://user-images.githubusercontent.com/52322338/195917174-0be12446-d527-4d81-8e0d-24370b8bdd03.mp4)
 
+### T-Rex
+
+Shows another use of the wave effect.
+By having a violent wave effect we can simulate something like the earth shaking due to something
+big approaching by toggling the effect in intervals.
+
+[T-Rex Example Video](https://user-images.githubusercontent.com/52322338/198832244-4898bbe9-4b24-4ddb-a5d5-665f3ecc71e3.mp4)
+
 ### Underwater
 
 Underwater (ish) effect.
