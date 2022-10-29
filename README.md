@@ -2,9 +2,23 @@
 
 This crate has an assortment of effects easily applied to Bevy apps via plugins.
 
-## Getting started
+Here is a showcase made by adding some visual effects to Bevy's breakout example.
+Note that the game itself is not modified except visually.
 
-### Bevy compatibility
+[Breakout Video](https://user-images.githubusercontent.com/52322338/198832540-a1a2fa00-8c75-4f55-a3e7-b4ce18fef958.mp4)
+
+The effects added in the above are:
+
+- A raindrop effect (due to effects applied after this one it gives the impression of static noise across the screen).
+- Chromatic aberration.
+- Waves. This effect causes the general "waviness" seen as well as the collision shake effect.
+- A CRT mask. This changes the edges of the screen to resemeble a CRT.
+- Pixelation. This pixelates the image. The demo increases this effect slightly each time a collision happens, but it's a bit hard to notice due to the short length of the video.
+- Color grading. A color lookup texture is applied, which changes the color output accordingly.
+
+Scroll down to see videos of the examples in contained in this repo.
+
+## Bevy compatibility
 
 When adding this crate as a dependency in your project,
 the Bevy version you use will need to match up according to the
@@ -14,7 +28,7 @@ following table:
 |---|---|
 |0.1 (unreleased)|0.9 (unreleased)|
 
-### In your code
+## Getting started
 
 The general strategy is:
 
@@ -48,9 +62,15 @@ fn update(mut flip: ResMut<Flip>) {
 }
 ```
 
+## Limitations
+
+- You can only use a single camera as the source for effects.
+- You cannot change the order of applied effects at runtime- this is decided by plugin insertion order when making the `App`.
+- You can toggle effects off/on at runtime- but the shaders will still run. They simply pass through the input image to the output, but this requires a texture sample. Therefore there is likely a slight performance cost for added-but-disabled effects.
+
 ## Examples
 
-All videos are captured from running the [examples](https://github.com/torsteingrindvik/bevy-vfx-bag/tree/main/examples).
+All videos below are captured from running the [examples](https://github.com/torsteingrindvik/bevy-vfx-bag/tree/main/examples).
 
 Do `cargo r --example` in this repository to get a list of examples you may run.
 Some examples use keyboard/mouse input to change parameters at runtime as well.
@@ -123,6 +143,14 @@ Not shown is changing the radius, and changing the color of the vignette.
 
 [Vignette Example Video](https://user-images.githubusercontent.com/52322338/195917174-0be12446-d527-4d81-8e0d-24370b8bdd03.mp4)
 
+### T-Rex
+
+Shows another use of the wave effect.
+By having a violent wave effect we can simulate something like the earth shaking due to something
+big approaching by toggling the effect in intervals.
+
+[T-Rex Example Video](https://user-images.githubusercontent.com/52322338/198832244-4898bbe9-4b24-4ddb-a5d5-665f3ecc71e3.mp4)
+
 ### Underwater
 
 Underwater (ish) effect.
@@ -145,4 +173,3 @@ which might be achieved by having a high number of waves at high speed with low 
 and quickly dampening those parameters to zero so the effect ends.
 
 [Wave Example Video](https://user-images.githubusercontent.com/52322338/195917192-461fd2a1-8bdf-4671-bfce-a1182de41fb1.mp4)
-

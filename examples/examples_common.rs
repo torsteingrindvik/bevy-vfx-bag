@@ -20,13 +20,16 @@ impl Default for ExampleText {
 
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(AssetServerSettings {
-            watch_for_changes: true,
-            ..default()
-        })
-        .init_resource::<ExampleText>()
-        .add_plugins(DefaultPlugins)
-        .add_system(bevy::window::close_on_esc);
+        app.init_resource::<ExampleText>()
+            .add_plugins(
+                DefaultPlugins
+                    .set(AssetPlugin {
+                        watch_for_changes: true,
+                        ..default()
+                    })
+                    .set(ImagePlugin::default_nearest()),
+            )
+            .add_system(bevy::window::close_on_esc);
     }
 }
 
@@ -60,8 +63,7 @@ pub(crate) struct ShouldAdd3dCameraBundle(bool);
 
 impl Plugin for ShapesExamplePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ImageSettings::default_nearest())
-            .insert_resource(ShouldAdd3dCameraBundle(self.add_3d_camera_bundle))
+        app.insert_resource(ShouldAdd3dCameraBundle(self.add_3d_camera_bundle))
             .add_plugin(FrameTimeDiagnosticsPlugin::default())
             .add_startup_system(shapes::setup)
             .add_startup_system(ui::setup)
@@ -223,7 +225,7 @@ mod ui {
                     "hello\nbevy!",
                     TextStyle {
                         font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 40.0,
+                        font_size: 30.0,
                         color: Color::WHITE,
                     },
                 ) // Set the alignment of the Text

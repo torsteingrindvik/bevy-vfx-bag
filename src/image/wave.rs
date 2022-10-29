@@ -1,13 +1,19 @@
 use bevy::{
     prelude::*,
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin},
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderRef, ShaderType,
+            SpecializedMeshPipelineError,
+        },
+    },
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const WAVE_SHADER_HANDLE: HandleUntyped =
@@ -45,8 +51,26 @@ pub struct Wave {
     pub amplitude_y: f32,
 }
 
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct WavePassthrough(pub bool);
+
+impl Passthrough for WavePassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<&WaveMaterial> for WavePassthrough {
+    fn from(material: &WaveMaterial) -> Self {
+        Self(material.passthrough)
+    }
+}
+
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "79fa38f9-ca04-4e59-83f9-da0de45afc04"]
+#[bind_group_data(WavePassthrough)]
 struct WaveMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -56,6 +80,8 @@ struct WaveMaterial {
     wave: Wave,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for WaveMaterial {
@@ -68,6 +94,16 @@ impl Material2d for WaveMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(WAVE_SHADER_HANDLE, "shaders/wave.wgsl")
     }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
+        Ok(())
+    }
 }
 
 impl FromWorld for WaveMaterial {
@@ -79,17 +115,23 @@ impl FromWorld for WaveMaterial {
             source_image: state.input_image_handle.clone_weak(),
             state,
             wave: *wave,
+            passthrough: false,
         }
     }
 }
 
-fn update_wave(mut wave_materials: ResMut<Assets<WaveMaterial>>, wave: Res<Wave>) {
-    if !wave.is_changed() {
+fn update_wave(
+    mut wave_materials: ResMut<Assets<WaveMaterial>>,
+    wave: Res<Wave>,
+    passthrough: Res<WavePassthrough>,
+) {
+    if !wave.is_changed() && !passthrough.is_changed() {
         return;
     }
 
     for (_, material) in wave_materials.iter_mut() {
         material.wave = *wave;
+        material.passthrough = passthrough.0;
     }
 }
 
@@ -101,6 +143,7 @@ impl Plugin for WavePlugin {
 
         app.init_resource::<Wave>()
             .init_resource::<WaveMaterial>()
+            .init_resource::<WavePassthrough>()
             .add_plugin(Material2dPlugin::<WaveMaterial>::default())
             .add_startup_system(setup_effect::<WaveMaterial>)
             .add_system(update_wave);

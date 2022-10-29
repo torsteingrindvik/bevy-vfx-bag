@@ -76,15 +76,11 @@ fn vignette(uv: vec2<f32>) -> f32 {
 }
 #endif
 
-@fragment
-fn fragment(
-    @builtin(position) position: vec4<f32>,
-    #import bevy_sprite::mesh2d_vertex_output
-) -> @location(0) vec4<f32> {
-
-    let uv = coords_to_viewport_uv(position.xy, view.viewport);
+fn fragment_impl(
+    position: vec4<f32>,
+    uv: vec2<f32>
+) -> vec4<f32> {
     let t = textureSample(texture, our_sampler, uv);
-
 
     #ifdef SQUARE
     let mask = square(uv);
@@ -98,3 +94,5 @@ fn fragment(
 
     return vec4<f32>(t.rgb * mask, 1.0);
 }
+
+#import bevy_vfx_bag::post_processing_passthrough

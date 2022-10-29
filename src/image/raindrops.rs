@@ -4,18 +4,20 @@ use bevy::{
     prelude::*,
     reflect::TypeUuid,
     render::{
+        mesh::MeshVertexBufferLayout,
         render_resource::{
-            AddressMode, AsBindGroup, SamplerDescriptor, ShaderRef, ShaderType, TextureFormat,
-            TextureViewDescriptor, TextureViewDimension,
+            AddressMode, AsBindGroup, RenderPipelineDescriptor, SamplerDescriptor, ShaderRef,
+            ShaderType, SpecializedMeshPipelineError, TextureFormat, TextureViewDescriptor,
+            TextureViewDimension,
         },
-        texture::ImageSampler,
+        texture::{CompressedImageFormats, ImageSampler},
     },
-    sprite::{Material2d, Material2dPlugin},
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const RAINDROPS_SHADER_HANDLE: HandleUntyped =
@@ -24,7 +26,7 @@ const RAINDROPS_SHADER_HANDLE: HandleUntyped =
 /// This plugin allows adding raindrops to an image.
 pub struct RaindropsPlugin;
 
-/// Blur parameters.
+/// Raindrop effect parameters.
 #[derive(Debug, Copy, Clone, Resource, ShaderType)]
 pub struct Raindrops {
     /// How fast the drops animate on screen.
@@ -48,8 +50,26 @@ impl Default for Raindrops {
     }
 }
 
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct RaindropsPassthrough(pub bool);
+
+impl Passthrough for RaindropsPassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
+}
+
+impl From<&RaindropsMaterial> for RaindropsPassthrough {
+    fn from(material: &RaindropsMaterial) -> Self {
+        Self(material.passthrough)
+    }
+}
+
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, Resource)]
 #[uuid = "3812649b-8a23-420a-bf03-a87ab11b7c78"]
+#[bind_group_data(RaindropsPassthrough)]
 struct RaindropsMaterial {
     #[texture(0)]
     #[sampler(1)]
@@ -63,6 +83,8 @@ struct RaindropsMaterial {
     raindrops: Raindrops,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for RaindropsMaterial {
@@ -74,6 +96,16 @@ impl HasEffectState for RaindropsMaterial {
 impl Material2d for RaindropsMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops.wgsl")
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
+        Ok(())
     }
 }
 
@@ -93,6 +125,7 @@ impl FromWorld for RaindropsMaterial {
             raindrops_image: Some(raindrops_image.0.clone_weak()),
             raindrops: *raindrops,
             state,
+            passthrough: false,
         }
     }
 }
@@ -107,24 +140,46 @@ struct RaindropsImage(Handle<Image>);
 
 impl FromWorld for RaindropsImage {
     fn from_world(world: &mut World) -> Self {
-        let asset_server = world
-            .get_resource::<AssetServer>()
-            .expect("Should have AssetServer");
+        let image_handle = if cfg!(feature = "dev") {
+            let asset_server = world
+                .get_resource::<AssetServer>()
+                .expect("Should have AssetServer");
 
-        Self(asset_server.load("textures/raindrops.tga"))
+            asset_server.load("textures/raindrops.tga")
+        } else {
+            use bevy::render::texture::ImageType;
+            let mut image_assets = world
+                .get_resource_mut::<Assets<Image>>()
+                .expect("Should have Assets<Image>");
+
+            let image_bytes = include_bytes!("../../assets/textures/raindrops.tga");
+            let image = Image::from_buffer(
+                image_bytes,
+                ImageType::Extension("tga"),
+                CompressedImageFormats::NONE,
+                true,
+            )
+            .expect("Raindrops tga should load properly");
+
+            image_assets.add(image)
+        };
+
+        Self(image_handle)
     }
 }
 
 fn update_raindrops(
     mut raindrop_materials: ResMut<Assets<RaindropsMaterial>>,
     raindrops: Res<Raindrops>,
+    passthrough: Res<RaindropsPassthrough>,
 ) {
-    if !raindrops.is_changed() {
+    if !raindrops.is_changed() && !passthrough.is_changed() {
         return;
     }
 
     for (_, material) in raindrop_materials.iter_mut() {
         material.raindrops = *raindrops;
+        material.passthrough = passthrough.0;
     }
 }
 
@@ -188,6 +243,7 @@ impl Plugin for RaindropsPlugin {
         app.init_resource::<Raindrops>()
             .init_resource::<RaindropsImage>()
             .init_resource::<RaindropsMaterial>()
+            .init_resource::<RaindropsPassthrough>()
             .add_plugin(Material2dPlugin::<RaindropsMaterial>::default())
             .add_startup_system(setup_effect::<RaindropsMaterial>)
             .add_system(fixup_texture)

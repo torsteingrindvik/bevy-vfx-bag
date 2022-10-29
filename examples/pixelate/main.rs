@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy_vfx_bag::{
-    image::pixelate::{Pixelate, PixelatePlugin},
+    image::pixelate::{Pixelate, PixelatePassthrough, PixelatePlugin},
     BevyVfxBagPlugin, PostProcessingInput,
 };
 
@@ -33,9 +33,14 @@ fn startup(mut commands: Commands) {
 fn update(
     keyboard_input: Res<Input<KeyCode>>,
     mut pixelate: ResMut<Pixelate>,
+    mut passthrough: ResMut<PixelatePassthrough>,
     mut text: ResMut<examples_common::ExampleText>,
 ) {
     let mut pixelate_diff = 0.0;
+
+    if keyboard_input.just_pressed(KeyCode::P) {
+        passthrough.0 = !passthrough.0;
+    }
 
     if keyboard_input.just_pressed(KeyCode::Up) {
         pixelate_diff = 1.0;
@@ -46,5 +51,8 @@ fn update(
     pixelate.block_size += pixelate_diff;
     pixelate.block_size = 1.0_f32.max(pixelate.block_size);
 
-    text.0 = format!("Pixelate block size (↑↓): {:.2?}", pixelate.block_size);
+    text.0 = format!(
+        "Pixelate block size (↑↓): {:.2?}, [P]assthrough: {:?}",
+        pixelate.block_size, passthrough.0
+    );
 }

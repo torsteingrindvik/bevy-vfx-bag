@@ -4,28 +4,34 @@
 #![doc = include_str!("../README.md")]
 
 use bevy::{
+    asset::load_internal_asset,
     core_pipeline::clear_color::ClearColorConfig,
     prelude::{App, *},
+    reflect::TypeUuid,
     render::{
         camera::RenderTarget,
         render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+            Extent3d, RenderPipelineDescriptor, TextureDescriptor, TextureDimension, TextureFormat,
+            TextureUsages,
         },
         texture::BevyDefault,
         view::RenderLayers,
     },
-    sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
+    sprite::{Material2d, Material2dKey, MaterialMesh2dBundle, Mesh2dHandle},
     window::WindowResized,
 };
 
 use crate::quad::window_sized_quad;
+
+const PASSTHROUGH_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12989973502425583956);
 
 /// Effects which are added to an image.
 /// This image might be the output of a render pass of an app.
 pub mod image;
 
 /// Helpers for making quads.
-pub mod quad;
+mod quad;
 
 /// For post processing effects to work, this marker should be added to a camera.
 /// This camera will be changed to render to an image buffer which will then be applied
@@ -154,6 +160,7 @@ pub struct BevyVfxBagPlugin;
 /// path. Suitable for hot-reloading.
 /// Else, the shader is loaded via the handle.
 /// Suitable when this crate is used as a dependency.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! shader_ref {
     ($handle: ident, $path_str: expr) => {{
@@ -168,12 +175,20 @@ macro_rules! shader_ref {
 /// Load an asset with the given handle
 /// and relative (to callee source file) path
 /// if the "dev" feature is not on.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! load_asset_if_no_dev_feature {
     ($app: ident, $handle: ident, $path_str: expr) => {{
         if !cfg!(feature = "dev") {
             use bevy::asset::load_internal_asset;
             load_internal_asset!($app, $handle, $path_str, Shader::from_wgsl);
+        }
+    }};
+
+    ($app: ident, $handle: ident, $path_str: expr, $t: path) => {{
+        if !cfg!(feature = "dev") {
+            use bevy::asset::load_internal_asset;
+            load_internal_asset!($app, $handle, $path_str, $t);
         }
     }};
 }
@@ -205,6 +220,25 @@ struct EffectState {
 
 trait HasEffectState {
     fn state(&self) -> EffectState;
+}
+
+trait Passthrough {
+    fn passthrough(&self) -> bool;
+}
+
+fn passthrough<T>(descriptor: &mut RenderPipelineDescriptor, key: &Material2dKey<T>)
+where
+    T: Material2d,
+    T::Data: Passthrough,
+{
+    if key.bind_group_data.passthrough() {
+        descriptor
+            .fragment
+            .as_mut()
+            .expect("Should have fragment state")
+            .shader_defs
+            .push("PASSTHROUGH".into());
+    }
 }
 
 pub(crate) fn setup_effect<M>(
@@ -327,6 +361,13 @@ fn setup_post_processing_2d_cameras(
 
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            PASSTHROUGH_SHADER_HANDLE,
+            "passthrough.wgsl",
+            Shader::from_wgsl
+        );
+
         app.init_resource::<BevyVfxBagState>()
             .add_startup_system_to_stage(StartupStage::PostStartup, setup_post_processing_input)
             .add_startup_system_to_stage(

@@ -14,13 +14,12 @@ struct FlipUniform {
 @group(1) @binding(2)
 var<uniform> flip: FlipUniform;
 
-@fragment
-fn fragment(
-    @builtin(position) position: vec4<f32>,
-    #import bevy_sprite::mesh2d_vertex_output
-) -> @location(0) vec4<f32> {
-    let uv_unaltered = coords_to_viewport_uv(position.xy, view.viewport);
-    let uv = abs(vec2<f32>(flip.x, flip.y) - uv_unaltered);
-
+fn fragment_impl(
+    position: vec4<f32>,
+    uv: vec2<f32>
+) -> vec4<f32> {
+    let uv = abs(vec2<f32>(flip.x, flip.y) - uv);
     return vec4<f32>(textureSample(texture, our_sampler, uv).rgb, 1.0);
 }
+
+#import bevy_vfx_bag::post_processing_passthrough

@@ -21,13 +21,10 @@ struct ChromaticAberration {
 @group(1) @binding(2)
 var<uniform> chromatic_aberration: ChromaticAberration;
 
-@fragment
-fn fragment(
-    @builtin(position) position: vec4<f32>,
-    #import bevy_sprite::mesh2d_vertex_output
-) -> @location(0) vec4<f32> {
-    let uv = coords_to_viewport_uv(position.xy, view.viewport);
-
+fn fragment_impl(
+    position: vec4<f32>,
+    uv: vec2<f32>
+) -> vec4<f32> {
     let out = vec3<f32>(
         textureSample(texture, our_sampler, uv + (chromatic_aberration.dir_r * chromatic_aberration.magnitude_r)).r,
         textureSample(texture, our_sampler, uv + (chromatic_aberration.dir_g * chromatic_aberration.magnitude_g)).g,
@@ -36,3 +33,5 @@ fn fragment(
 
     return vec4<f32>(out, 1.0);
 }
+
+#import bevy_vfx_bag::post_processing_passthrough

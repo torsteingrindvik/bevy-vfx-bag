@@ -24,13 +24,15 @@ use bevy::{
             SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureViewDescriptor,
             TextureViewDimension,
         },
-        texture::{CompressedImageFormats, ImageType},
+        texture::{CompressedImageFormats, ImageSampler, ImageType},
     },
     sprite::{Material2d, Material2dKey, Material2dPlugin},
+    utils::HashMap,
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, EffectState, HasEffectState,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, EffectState,
+    HasEffectState, Passthrough,
 };
 
 const LUT_SHADER_HANDLE: HandleUntyped =
@@ -119,6 +121,8 @@ impl Lut3d {
             ..default()
         });
 
+        image.sampler_descriptor = ImageSampler::linear();
+
         let handle = images.add(image);
 
         Self(handle)
@@ -143,22 +147,6 @@ impl Lut3d {
     }
 }
 
-/// The neutral LUT.
-#[derive(Debug, Clone, Resource)]
-pub struct LutNeutral(Lut3d);
-
-impl FromWorld for LutNeutral {
-    fn from_world(world: &mut World) -> Self {
-        let mut images = world
-            .get_resource_mut::<Assets<Image>>()
-            .expect("Assets<Image> should exist");
-
-        let data = include_bytes!("neutral.png");
-
-        Self(Lut3d::new(&mut *images, data))
-    }
-}
-
 impl<'a> From<&'a Lut> for Option<&'a Handle<Image>> {
     fn from(lut: &'a Lut) -> Self {
         Some(&lut.texture.0)
@@ -178,6 +166,8 @@ struct LutMaterial {
     lut: Lut,
 
     state: EffectState,
+
+    passthrough: bool,
 }
 
 impl HasEffectState for LutMaterial {
@@ -200,6 +190,8 @@ impl Material2d for LutMaterial {
         _layout: &MeshVertexBufferLayout,
         key: Material2dKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
         let mut push_def = |def: &str| {
             descriptor
                 .fragment
@@ -226,6 +218,7 @@ impl FromWorld for LutMaterial {
             source_image: state.input_image_handle.clone_weak(),
             state,
             lut: lut.clone(),
+            passthrough: false,
         }
     }
 }
@@ -233,23 +226,165 @@ impl FromWorld for LutMaterial {
 #[derive(Eq, PartialEq, Hash, Clone)]
 struct LutMaterialKey {
     split_vertically: bool,
+    passthrough: bool,
+}
+
+impl Passthrough for LutMaterialKey {
+    fn passthrough(&self) -> bool {
+        self.passthrough
+    }
+}
+
+/// If this effect should not be enabled, i.e. it should just
+/// pass through the input image.
+#[derive(Debug, Resource, Default, PartialEq, Eq, Hash, Clone)]
+pub struct LutPassthrough(pub bool);
+
+impl Passthrough for LutPassthrough {
+    fn passthrough(&self) -> bool {
+        self.0
+    }
 }
 
 impl From<&LutMaterial> for LutMaterialKey {
     fn from(lut_material: &LutMaterial) -> Self {
         Self {
             split_vertically: lut_material.lut.split_vertically,
+            passthrough: lut_material.passthrough,
         }
     }
 }
 
-fn update_lut(mut lut_materials: ResMut<Assets<LutMaterial>>, lut: Res<Lut>) {
-    if !lut.is_changed() {
+fn update_lut(
+    mut lut_materials: ResMut<Assets<LutMaterial>>,
+    lut: Res<Lut>,
+    passthrough: Res<LutPassthrough>,
+) {
+    if !lut.is_changed() && !passthrough.is_changed() {
         return;
     }
 
     for (_, material) in lut_materials.iter_mut() {
-        material.lut = lut.clone()
+        material.lut = lut.clone();
+        material.passthrough = passthrough.0;
+    }
+}
+
+/// LUTs available for use.
+///
+/// They can be used by calling `.set_texture` on [`Lut`].
+///
+/// By loading a new image and inserting it into the handles in this resource,
+/// the image will automatically be transformed into a [`Lut3d`] when loaded
+/// and moved into the `ready` field.
+///
+/// The LUTs shipped with the plugin itself (applied using `.set_texture`) are:
+///     - "Neutral"
+///     - "Arctic"
+///     - "Burlesque"
+///     - "Denim"
+///     - "Neo"
+///     - "Rouge"
+///     - "Sauna"
+///     - "Slate"
+#[derive(Debug, Resource)]
+pub struct Luts {
+    /// Handles to images which have not yet been loaded
+    /// and moved into `ready`.
+    pub handles: HashMap<Handle<Image>, &'static str>,
+
+    /// [`Lut3d`]s which are ready for use.
+    /// See [`Lut::set_texture`].
+    pub ready: HashMap<&'static str, Lut3d>,
+}
+
+impl FromWorld for Luts {
+    #[cfg(feature = "dev")]
+    fn from_world(world: &mut World) -> Self {
+        let assets = world.resource::<AssetServer>();
+
+        Self {
+            handles: HashMap::from_iter(vec![
+                (assets.load("luts/neutral.png"), "Neutral"),
+                (assets.load("luts/arctic.png"), "Arctic"),
+                (assets.load("luts/burlesque.png"), "Burlesque"),
+                (assets.load("luts/denim.png"), "Denim"),
+                (assets.load("luts/neo.png"), "Neo"),
+                (assets.load("luts/rouge.png"), "Rouge"),
+                (assets.load("luts/sauna.png"), "Sauna"),
+                (assets.load("luts/slate.png"), "Slate"),
+            ]),
+            ready: HashMap::new(),
+        }
+    }
+
+    #[cfg(not(feature = "dev"))]
+    fn from_world(world: &mut World) -> Self {
+        let mut assets = world.resource_mut::<Assets<Image>>();
+
+        macro_rules! load {
+            ($assets: ident, $name: literal, $image_path: literal) => {
+                (
+                    $assets.add(
+                        Image::from_buffer(
+                            include_bytes!($image_path),
+                            ImageType::Extension("png"), // todo
+                            CompressedImageFormats::NONE,
+                            // If `true` the output the mapping is very dark.
+                            // If not, it's much closer to the original.
+                            false,
+                        )
+                        .expect("Should be able to load image from buffer"),
+                    ),
+                    $name,
+                )
+            };
+        }
+
+        Self {
+            handles: HashMap::from_iter(vec![
+                load!(assets, "Neutral", "../../../assets/luts/neutral.png"),
+                load!(assets, "Arctic", "../../../assets/luts/arctic.png"),
+                load!(assets, "Burlesque", "../../../assets/luts/burlesque.png"),
+                load!(assets, "Denim", "../../../assets/luts/denim.png"),
+                load!(assets, "Neo", "../../../assets/luts/neo.png"),
+                load!(assets, "Rouge", "../../../assets/luts/rouge.png"),
+                load!(assets, "Sauna", "../../../assets/luts/sauna.png"),
+                load!(assets, "Slate", "../../../assets/luts/slate.png"),
+            ]),
+            ready: HashMap::new(),
+        }
+    }
+}
+
+fn add_created_3d_luts(
+    mut ev_asset: EventReader<AssetEvent<Image>>,
+    mut assets: ResMut<Assets<Image>>,
+    mut luts: ResMut<Luts>,
+) {
+    for ev in ev_asset.iter() {
+        if let AssetEvent::Created { handle } = ev {
+            if let Some(lut_name) = luts.handles.remove(handle) {
+                luts.ready
+                    .insert(lut_name, Lut3d::from_image(&mut assets, handle));
+            }
+        }
+    }
+}
+
+/// The neutral LUT.
+#[derive(Debug, Clone, Resource)]
+pub struct LutNeutral(Lut3d);
+
+impl FromWorld for LutNeutral {
+    fn from_world(world: &mut World) -> Self {
+        let mut images = world
+            .get_resource_mut::<Assets<Image>>()
+            .expect("Assets<Image> should exist");
+
+        let data = include_bytes!("../../../assets/luts/neutral.png");
+
+        Self(Lut3d::new(&mut *images, data))
     }
 }
 
@@ -260,14 +395,17 @@ impl Plugin for LutPlugin {
         load_asset_if_no_dev_feature!(app, LUT_SHADER_HANDLE, "../../../assets/shaders/lut.wgsl");
 
         app
-            // Initialize the fallback neutral LUT in case the user
-            // has not initialized [`Lut`]
+            // Custom LUTs
+            .init_resource::<Luts>()
+            // The "no-op" LUT
             .init_resource::<LutNeutral>()
-            // Now initialize [`Lut`], which will then use [`LutNeutral`] if it must.
+            // The user config
             .init_resource::<Lut>()
             .init_resource::<LutMaterial>()
+            .init_resource::<LutPassthrough>()
             .add_plugin(Material2dPlugin::<LutMaterial>::default())
             .add_startup_system(setup_effect::<LutMaterial>)
+            .add_system(add_created_3d_luts)
             .add_system(update_lut);
     }
 }

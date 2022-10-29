@@ -21,13 +21,10 @@ struct Wave {
 @group(1) @binding(2)
 var<uniform> wave: Wave;
 
-@fragment
-fn fragment(
-    @builtin(position) position: vec4<f32>,
-    #import bevy_sprite::mesh2d_vertex_output
-) -> @location(0) vec4<f32> {
-    let uv = coords_to_viewport_uv(position.xy, view.viewport);
-
+fn fragment_impl(
+    position: vec4<f32>,
+    uv: vec2<f32>
+) -> vec4<f32> {
     let pi_uv = PI * uv;
     let pi_time = PI * globals.time;
 
@@ -37,4 +34,7 @@ fn fragment(
     let uv_displaced = vec2<f32>(uv.x + offset_x, uv.y + offset_y);
 
     return vec4<f32>(textureSample(texture, our_sampler, uv_displaced).rgb, 1.0);
+
 }
+
+#import bevy_vfx_bag::post_processing_passthrough

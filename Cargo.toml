@@ -46,6 +46,7 @@ alsa = "=0.6.0"
 
 [dev-dependencies]
 bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
+# bevy = { path = "../bevy", features = ["tga"] }
 
 color-eyre = "0.6"
 image = "0.24"
