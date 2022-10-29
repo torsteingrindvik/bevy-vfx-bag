@@ -240,14 +240,6 @@ impl Plugin for RaindropsPlugin {
             "../../assets/shaders/raindrops.wgsl"
         );
 
-        // if !cfg!(feature = "dev") {
-        //     let mut assets = app.world.resource_mut::<Assets<_>>();
-        //     assets.set_untracked(
-        //         RAINDROPS_TGA_HANDLE,
-        //         (Image::from_buffer)(include_bytes!("../../assets/textures/raindrops.tga")),
-        //     );
-        // }
-
         app.init_resource::<Raindrops>()
             .init_resource::<RaindropsImage>()
             .init_resource::<RaindropsMaterial>()

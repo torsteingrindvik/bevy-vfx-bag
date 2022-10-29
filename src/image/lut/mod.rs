@@ -24,9 +24,10 @@ use bevy::{
             SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureViewDescriptor,
             TextureViewDimension,
         },
-        texture::{CompressedImageFormats, ImageType},
+        texture::{CompressedImageFormats, ImageSampler, ImageType},
     },
     sprite::{Material2d, Material2dKey, Material2dPlugin},
+    utils::HashMap,
 };
 
 use crate::{
@@ -37,7 +38,6 @@ use crate::{
 const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 182690283339630534);
 
-#[cfg(not(feature = "dev"))]
 /// A handle to the "neo" LUT image.
 pub const LUT_NEO_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Image::TYPE_UUID, 7555976531052692665);
@@ -125,6 +125,8 @@ impl Lut3d {
             ..default()
         });
 
+        image.sampler_descriptor = ImageSampler::linear();
+
         let handle = images.add(image);
 
         Self(handle)
@@ -146,23 +148,6 @@ impl Lut3d {
         .expect("Should be able to load image from buffer");
 
         Self::new_from_image_sized(images, image, size)
-    }
-}
-
-/// The neutral LUT.
-#[derive(Debug, Clone, Resource)]
-pub struct LutNeutral(Lut3d);
-
-impl FromWorld for LutNeutral {
-    fn from_world(world: &mut World) -> Self {
-        let mut images = world
-            .get_resource_mut::<Assets<Image>>()
-            .expect("Assets<Image> should exist");
-
-        let data = include_bytes!("neutral.png");
-        assert_ne!(data.len(), 0);
-
-        Self(Lut3d::new(&mut *images, data))
     }
 }
 
@@ -289,35 +274,132 @@ fn update_lut(
     }
 }
 
+/// LUTs available for use.
+///
+/// They can be used by calling `.set_texture` on [`Lut`].
+///
+/// By loading a new image and inserting it into the handles in this resource,
+/// the image will automatically be transformed into a [`Lut3d`] when loaded
+/// and moved into the `ready` field.
+#[derive(Debug, Resource)]
+pub struct Luts {
+    /// Handles to images which have not yet been loaded
+    /// and moved into `ready`.
+    pub handles: HashMap<Handle<Image>, &'static str>,
+
+    /// [`Lut3d`]s which are ready for use.
+    /// See [`Lut::set_texture`].
+    pub ready: HashMap<&'static str, Lut3d>,
+}
+
+impl FromWorld for Luts {
+    #[cfg(feature = "dev")]
+    fn from_world(world: &mut World) -> Self {
+        let assets = world.resource::<AssetServer>();
+
+        Self {
+            handles: HashMap::from_iter(vec![
+                (assets.load("luts/neutral.png"), "Neutral"),
+                (assets.load("luts/arctic.png"), "Arctic"),
+                (assets.load("luts/burlesque.png"), "Burlesque"),
+                (assets.load("luts/denim.png"), "Denim"),
+                (assets.load("luts/neo.png"), "Neo"),
+                (assets.load("luts/rouge.png"), "Rouge"),
+                (assets.load("luts/sauna.png"), "Sauna"),
+                (assets.load("luts/slate.png"), "Slate"),
+            ]),
+            ready: HashMap::new(),
+        }
+    }
+
+    #[cfg(not(feature = "dev"))]
+    fn from_world(world: &mut World) -> Self {
+        let mut assets = world.resource_mut::<Assets<Image>>();
+
+        macro_rules! load {
+            ($assets: ident, $name: literal, $image_path: literal) => {
+                (
+                    $assets.add(
+                        Image::from_buffer(
+                            include_bytes!($image_path),
+                            ImageType::Extension("png"), // todo
+                            CompressedImageFormats::NONE,
+                            // If `true` the output the mapping is very dark.
+                            // If not, it's much closer to the original.
+                            false,
+                        )
+                        .expect("Should be able to load image from buffer"),
+                    ),
+                    $name,
+                )
+            };
+        }
+
+        Self {
+            handles: HashMap::from_iter(vec![
+                load!(assets, "Neutral", "../../../assets/luts/neutral.png"),
+                load!(assets, "Arctic", "../../../assets/luts/arctic.png"),
+                load!(assets, "Burlesque", "../../../assets/luts/burlesque.png"),
+                load!(assets, "Denim", "../../../assets/luts/denim.png"),
+                load!(assets, "Neo", "../../../assets/luts/neo.png"),
+                load!(assets, "Rouge", "../../../assets/luts/rouge.png"),
+                load!(assets, "Sauna", "../../../assets/luts/sauna.png"),
+                load!(assets, "Slate", "../../../assets/luts/slate.png"),
+            ]),
+            ready: HashMap::new(),
+        }
+    }
+}
+
+fn add_created_3d_luts(
+    mut ev_asset: EventReader<AssetEvent<Image>>,
+    mut assets: ResMut<Assets<Image>>,
+    mut luts: ResMut<Luts>,
+) {
+    for ev in ev_asset.iter() {
+        if let AssetEvent::Created { handle } = ev {
+            if let Some(lut_name) = luts.handles.remove(handle) {
+                luts.ready
+                    .insert(lut_name, Lut3d::from_image(&mut assets, handle));
+            }
+        }
+    }
+}
+
+/// The neutral LUT.
+#[derive(Debug, Clone, Resource)]
+pub struct LutNeutral(Lut3d);
+
+impl FromWorld for LutNeutral {
+    fn from_world(world: &mut World) -> Self {
+        let mut images = world
+            .get_resource_mut::<Assets<Image>>()
+            .expect("Assets<Image> should exist");
+
+        let data = include_bytes!("../../../assets/luts/neutral.png");
+
+        Self(Lut3d::new(&mut *images, data))
+    }
+}
+
 impl Plugin for LutPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let _span = debug_span!("LUT build").entered();
 
         load_asset_if_no_dev_feature!(app, LUT_SHADER_HANDLE, "../../../assets/shaders/lut.wgsl");
 
-        if !cfg!(feature = "dev") {
-            app.world.resource_mut::<Assets<Image>>().set_untracked(
-                LUT_NEO_HANDLE,
-                Image::from_buffer(
-                    include_bytes!("../../../assets/luts/neo.png"),
-                    ImageType::Extension("png"),
-                    CompressedImageFormats::NONE,
-                    true,
-                )
-                .expect("'neo' LUT should load successfully"),
-            );
-        }
-
         app
-            // Initialize the fallback neutral LUT in case the user
-            // has not initialized [`Lut`]
+            // Custom LUTs
+            .init_resource::<Luts>()
+            // The "no-op" LUT
             .init_resource::<LutNeutral>()
-            // Now initialize [`Lut`], which will then use [`LutNeutral`] if it must.
+            // The user config
             .init_resource::<Lut>()
             .init_resource::<LutMaterial>()
             .init_resource::<LutPassthrough>()
             .add_plugin(Material2dPlugin::<LutMaterial>::default())
             .add_startup_system(setup_effect::<LutMaterial>)
+            .add_system(add_created_3d_luts)
             .add_system(update_lut);
     }
 }

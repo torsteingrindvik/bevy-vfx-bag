@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::{input::mouse::MouseWheel, prelude::*};
 
 use bevy_vfx_bag::{
-    image::raindrops::{Raindrops, RaindropsPlugin},
+    image::raindrops::{Raindrops, RaindropsPassthrough, RaindropsPlugin},
     BevyVfxBagPlugin, PostProcessingInput,
 };
 
@@ -35,6 +35,7 @@ fn update(
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mut raindrops: ResMut<Raindrops>,
     mut text: ResMut<examples_common::ExampleText>,
+    mut passthrough: ResMut<RaindropsPassthrough>,
 ) {
     let mut time_scaling_diff = 0.0;
     let mut intensity_diff = 0.0;
@@ -60,13 +61,17 @@ fn update(
         }
     }
 
+    if keyboard_input.just_pressed(KeyCode::P) {
+        passthrough.0 = !passthrough.0;
+    }
+
     raindrops.time_scaling += time_scaling_diff;
     raindrops.intensity += intensity_diff;
     raindrops.zoom += zoom_diff;
 
     // Display parameters on screen
     text.0 = format!(
-        "(Press ←↑→↓, MouseWheel) Time scaling: {:.2?}, intensity: {:.2?}, zoom: {:.2?}",
-        raindrops.time_scaling, raindrops.intensity, raindrops.zoom
+        "(Press ←↑→↓, MouseWheel) Time scaling: {:.2?}, intensity: {:.2?}, zoom: {:.2?}, [p]assthrough: {:?}",
+        raindrops.time_scaling, raindrops.intensity, raindrops.zoom, passthrough.0
     );
 }
