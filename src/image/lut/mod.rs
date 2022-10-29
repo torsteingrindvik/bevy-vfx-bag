@@ -38,10 +38,6 @@ use crate::{
 const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 182690283339630534);
 
-/// A handle to the "neo" LUT image.
-pub const LUT_NEO_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 7555976531052692665);
-
 /// This plugin allows using look-up textures for color grading.
 pub struct LutPlugin;
 
@@ -281,6 +277,16 @@ fn update_lut(
 /// By loading a new image and inserting it into the handles in this resource,
 /// the image will automatically be transformed into a [`Lut3d`] when loaded
 /// and moved into the `ready` field.
+///
+/// The LUTs shipped with the plugin itself (applied using `.set_texture`) are:
+///     - "Neutral"
+///     - "Arctic"
+///     - "Burlesque"
+///     - "Denim"
+///     - "Neo"
+///     - "Rouge"
+///     - "Sauna"
+///     - "Slate"
 #[derive(Debug, Resource)]
 pub struct Luts {
     /// Handles to images which have not yet been loaded
