@@ -1,10 +1,9 @@
 # Bevy Visual Effects Bag
 
 This crate has an assortment of effects easily applied to Bevy apps via plugins.
+Scroll down to see example videos of the various effects.
 
-## Getting started
-
-### Bevy compatibility
+## Bevy compatibility
 
 When adding this crate as a dependency in your project,
 the Bevy version you use will need to match up according to the
@@ -14,7 +13,7 @@ following table:
 |---|---|
 |0.1 (unreleased)|0.9 (unreleased)|
 
-### In your code
+## Getting started
 
 The general strategy is:
 
@@ -47,6 +46,12 @@ fn update(mut flip: ResMut<Flip>) {
     // Here I can change the parameters of this effect at runtime.
 }
 ```
+
+## Limitations
+
+- You can only use a single camera as the source for effects.
+- You cannot change the order of applied effects at runtime- this is decided by plugin insertion order when making the `App`.
+- You can toggle effects off/on at runtime- but the shaders will still run. They simply pass through the input image to the output, but this requires a texture sample. Therefore there is likely a slight performance cost for added-but-disabled effects.
 
 ## Examples
 
@@ -145,4 +150,3 @@ which might be achieved by having a high number of waves at high speed with low 
 and quickly dampening those parameters to zero so the effect ends.
 
 [Wave Example Video](https://user-images.githubusercontent.com/52322338/195917192-461fd2a1-8bdf-4671-bfce-a1182de41fb1.mp4)
-
