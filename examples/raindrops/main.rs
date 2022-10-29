@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::{input::mouse::MouseWheel, prelude::*};
 
 use bevy_vfx_bag::{
-    image::rainrops::{Raindrops, RaindropsPlugin},
+    image::raindrops::{Raindrops, RaindropsPlugin},
     BevyVfxBagPlugin, PostProcessingInput,
 };
 

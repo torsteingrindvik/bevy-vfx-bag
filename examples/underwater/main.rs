@@ -9,7 +9,7 @@ use bevy_vfx_bag::{
         flip::{Flip, FlipPlugin},
         lut::{Lut, Lut3d, LutPlugin},
         mask::{Mask, MaskPlugin},
-        rainrops::RaindropsPlugin,
+        raindrops::RaindropsPlugin,
         wave::{Wave, WavePlugin},
     },
     BevyVfxBagPlugin, PostProcessingInput,

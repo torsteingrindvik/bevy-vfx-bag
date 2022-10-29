@@ -8,7 +8,7 @@ pub mod flip;
 pub mod blur;
 
 /// A raindrops effect.
-pub mod rainrops;
+pub mod raindrops;
 
 /// A wave effect.
 pub mod wave;

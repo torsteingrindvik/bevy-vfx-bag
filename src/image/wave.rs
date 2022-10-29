@@ -1,13 +1,19 @@
 use bevy::{
     prelude::*,
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin},
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderRef, ShaderType,
+            SpecializedMeshPipelineError,
+        },
+    },
+    sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
 
 use crate::{
-    load_asset_if_no_dev_feature, new_effect_state, setup_effect, shader_ref, EffectState,
-    HasEffectState, Passthrough,
+    load_asset_if_no_dev_feature, new_effect_state, passthrough, setup_effect, shader_ref,
+    EffectState, HasEffectState, Passthrough,
 };
 
 const WAVE_SHADER_HANDLE: HandleUntyped =
@@ -87,6 +93,16 @@ impl HasEffectState for WaveMaterial {
 impl Material2d for WaveMaterial {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(WAVE_SHADER_HANDLE, "shaders/wave.wgsl")
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        passthrough(descriptor, &key);
+
+        Ok(())
     }
 }
 

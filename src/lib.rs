@@ -182,6 +182,13 @@ macro_rules! load_asset_if_no_dev_feature {
             load_internal_asset!($app, $handle, $path_str, Shader::from_wgsl);
         }
     }};
+
+    ($app: ident, $handle: ident, $path_str: expr, $t: path) => {{
+        if !cfg!(feature = "dev") {
+            use bevy::asset::load_internal_asset;
+            load_internal_asset!($app, $handle, $path_str, $t);
+        }
+    }};
 }
 
 fn new_effect_state(world: &mut World) -> EffectState {

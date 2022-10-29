@@ -37,6 +37,11 @@ use crate::{
 const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 182690283339630534);
 
+#[cfg(not(feature = "dev"))]
+/// A handle to the "neo" LUT image.
+pub const LUT_NEO_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 7555976531052692665);
+
 /// This plugin allows using look-up textures for color grading.
 pub struct LutPlugin;
 
@@ -155,6 +160,7 @@ impl FromWorld for LutNeutral {
             .expect("Assets<Image> should exist");
 
         let data = include_bytes!("neutral.png");
+        assert_ne!(data.len(), 0);
 
         Self(Lut3d::new(&mut *images, data))
     }
@@ -277,8 +283,6 @@ fn update_lut(
         return;
     }
 
-    info!("Changed something: {passthrough:?}");
-
     for (_, material) in lut_materials.iter_mut() {
         material.lut = lut.clone();
         material.passthrough = passthrough.0;
@@ -290,6 +294,19 @@ impl Plugin for LutPlugin {
         let _span = debug_span!("LUT build").entered();
 
         load_asset_if_no_dev_feature!(app, LUT_SHADER_HANDLE, "../../../assets/shaders/lut.wgsl");
+
+        if !cfg!(feature = "dev") {
+            app.world.resource_mut::<Assets<Image>>().set_untracked(
+                LUT_NEO_HANDLE,
+                Image::from_buffer(
+                    include_bytes!("../../../assets/luts/neo.png"),
+                    ImageType::Extension("png"),
+                    CompressedImageFormats::NONE,
+                    true,
+                )
+                .expect("'neo' LUT should load successfully"),
+            );
+        }
 
         app
             // Initialize the fallback neutral LUT in case the user

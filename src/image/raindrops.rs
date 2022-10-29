@@ -10,7 +10,7 @@ use bevy::{
             ShaderType, SpecializedMeshPipelineError, TextureFormat, TextureViewDescriptor,
             TextureViewDimension,
         },
-        texture::ImageSampler,
+        texture::{CompressedImageFormats, ImageSampler},
     },
     sprite::{Material2d, Material2dKey, Material2dPlugin},
 };
@@ -140,11 +140,31 @@ struct RaindropsImage(Handle<Image>);
 
 impl FromWorld for RaindropsImage {
     fn from_world(world: &mut World) -> Self {
-        let asset_server = world
-            .get_resource::<AssetServer>()
-            .expect("Should have AssetServer");
+        let image_handle = if cfg!(feature = "dev") {
+            let asset_server = world
+                .get_resource::<AssetServer>()
+                .expect("Should have AssetServer");
 
-        Self(asset_server.load("textures/raindrops.tga"))
+            asset_server.load("textures/raindrops.tga")
+        } else {
+            use bevy::render::texture::ImageType;
+            let mut image_assets = world
+                .get_resource_mut::<Assets<Image>>()
+                .expect("Should have Assets<Image>");
+
+            let image_bytes = include_bytes!("../../assets/textures/raindrops.tga");
+            let image = Image::from_buffer(
+                image_bytes,
+                ImageType::Extension("tga"),
+                CompressedImageFormats::NONE,
+                true,
+            )
+            .expect("Raindrops tga should load properly");
+
+            image_assets.add(image)
+        };
+
+        Self(image_handle)
     }
 }
 
@@ -219,6 +239,14 @@ impl Plugin for RaindropsPlugin {
             RAINDROPS_SHADER_HANDLE,
             "../../assets/shaders/raindrops.wgsl"
         );
+
+        // if !cfg!(feature = "dev") {
+        //     let mut assets = app.world.resource_mut::<Assets<_>>();
+        //     assets.set_untracked(
+        //         RAINDROPS_TGA_HANDLE,
+        //         (Image::from_buffer)(include_bytes!("../../assets/textures/raindrops.tga")),
+        //     );
+        // }
 
         app.init_resource::<Raindrops>()
             .init_resource::<RaindropsImage>()
