@@ -23,11 +23,17 @@ fn fragment_impl(
     // when this is used. Great!
     let half_texel = vec3<f32>(1.0 / 64. / 2.);
 
-    let raw_color = textureSample(texture, our_sampler, uv).rgb;
+    // Notice the ".rbg".
+    // If we sample the LUT using ".rgb" instead,
+    // the way the 3D texture is loaded will mean the
+    // green and blue colors are swapped.
+    // This mitigates that.
+    let raw_color = textureSample(texture, our_sampler, uv).rbg;
+
     var out = textureSample(lut, lut_sampler, raw_color + half_texel).rgb;
 
 #ifdef SPLIT_VERTICALLY
-    if (uv.x > 0.5) {
+    if (uv.x < 0.5) {
         out = raw_color;
     }
 #endif
