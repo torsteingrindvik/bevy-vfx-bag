@@ -118,7 +118,7 @@ fn update(
     let num_presets = presets.0.len() as isize;
     *preset_index = preset_index.clamp(0, num_presets - 1);
 
-    let preset = (*presets).0[*preset_index as usize];
+    let preset = presets.0[*preset_index as usize];
 
     *wave = preset.into();
 
