@@ -128,13 +128,18 @@ impl FromWorld for FlipMaterial {
     }
 }
 
-fn update_flip(mut flip_materials: ResMut<Assets<FlipMaterial>>, flip: Res<Flip>) {
-    if !flip.is_changed() {
+fn update_flip(
+    mut flip_materials: ResMut<Assets<FlipMaterial>>,
+    passthrough: Res<FlipPassthrough>,
+    flip: Res<Flip>,
+) {
+    if !flip.is_changed() && !passthrough.is_changed() {
         return;
     }
 
     for (_, material) in flip_materials.iter_mut() {
         material.flip = (*flip).into();
+        material.passthrough = passthrough.0;
     }
 }
 
