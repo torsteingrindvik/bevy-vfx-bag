@@ -21,3 +21,6 @@ pub mod lut;
 
 /// Pixelation effect.
 pub mod pixelate;
+
+/// Tint using colors.
+pub mod tint;
