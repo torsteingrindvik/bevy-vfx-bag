@@ -26,7 +26,7 @@ following table:
 
 |bevy-vfx-bag|bevy|
 |---|---|
-|0.1 (unreleased)|0.9 (unreleased)|
+|0.1.0|0.9.0|
 
 ## Getting started
 
