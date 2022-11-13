@@ -384,7 +384,7 @@ impl FromWorld for LutNeutral {
 
         let data = include_bytes!("../../../assets/luts/neutral.png");
 
-        Self(Lut3d::new(&mut *images, data))
+        Self(Lut3d::new(&mut images, data))
     }
 }
 
