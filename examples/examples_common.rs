@@ -1,5 +1,10 @@
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
+use bevy::{
+    diagnostic::FrameTimeDiagnosticsPlugin, prelude::*, render::camera::Viewport, window::WindowId,
+};
+use bevy::{
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    window::WindowResized,
+};
 use core::f32::consts::PI;
 
 /// Adds some "sane defaults" for showing examples/development:
@@ -67,6 +72,7 @@ impl Plugin for ShapesExamplePlugin {
             .add_plugin(FrameTimeDiagnosticsPlugin::default())
             .add_startup_system(shapes::setup)
             .add_startup_system(ui::setup)
+            .add_system(set_camera_viewports)
             .add_system(shapes::rotate)
             .add_system(ui::fps_text_update)
             .add_system(ui::ui_text_update);
@@ -98,7 +104,7 @@ mod shapes {
             meshes.add(shape::Box::default().into()),
             meshes.add(shape::Capsule::default().into()),
             meshes.add(shape::Torus::default().into()),
-            meshes.add(shape::Icosphere::default().into()),
+            meshes.add(shape::Icosphere::default().try_into().unwrap()),
             meshes.add(shape::UVSphere::default().into()),
         ];
 
@@ -296,6 +302,47 @@ mod ui {
                     text.sections[1].value = format!("{average:.2}");
                 }
             }
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct LeftCamera;
+
+#[derive(Component)]
+pub struct RightCamera;
+
+fn set_camera_viewports(
+    windows: Res<Windows>,
+    mut resize_events: EventReader<WindowResized>,
+    mut left_camera: Query<&mut Camera, (With<LeftCamera>, Without<RightCamera>)>,
+    mut right_camera: Query<&mut Camera, With<RightCamera>>,
+) {
+    // We need to dynamically resize the camera's viewports whenever the window size changes
+    // so then each camera always takes up half the screen.
+    // A resize_event is sent when the window is first created, allowing us to reuse this system for initial setup.
+    for resize_event in resize_events.iter() {
+        if resize_event.id == WindowId::primary() {
+            let window = windows.primary();
+            let mut left_camera = match left_camera.get_single_mut() {
+                Ok(lc) => lc,
+                Err(_) => return,
+            };
+            left_camera.viewport = Some(Viewport {
+                physical_position: UVec2::new(0, 0),
+                physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
+                ..default()
+            });
+
+            let mut right_camera = match right_camera.get_single_mut() {
+                Ok(rc) => rc,
+                Err(_) => return,
+            };
+            right_camera.viewport = Some(Viewport {
+                physical_position: UVec2::new(window.physical_width() / 2, 0),
+                physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
+                ..default()
+            });
         }
     }
 }

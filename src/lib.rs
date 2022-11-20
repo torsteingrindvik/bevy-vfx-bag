@@ -26,6 +26,9 @@ use crate::quad::window_sized_quad;
 const PASSTHROUGH_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12989973502425583956);
 
+/// Post processing effects.
+pub mod post_processing;
+
 /// Effects which are added to an image.
 /// This image might be the output of a render pass of an app.
 pub mod image;
