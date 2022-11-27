@@ -79,21 +79,16 @@ pub struct PixelateUniform {
     block_size: f32,
 }
 
-impl From<Pixelate> for PixelateUniform {
-    fn from(pixelate: Pixelate) -> Self {
-        Self {
-            block_size: pixelate.block_size,
-        }
-    }
-}
-
-// #[derive(Resource, Default)]
-// struct PixelateUniforms {
-//     uniforms: DynamicUniformBuffer<PixelateUniform>,
+// impl From<Pixelate> for PixelateUniform {
+//     fn from(pixelate: Pixelate) -> Self {
+//         Self {
+//             block_size: pixelate.block_size,
+//         }
+//     }
 // }
 
-#[derive(Component)]
-struct PixelateUniformIndex(u32);
+// #[derive(Component)]
+// struct PixelateUniformIndex(u32);
 
 /// This plugin allows pixelating the image.
 pub struct PixelatePlugin;
@@ -114,12 +109,11 @@ impl Plugin for PixelatePlugin {
             Ok(render_app) => render_app,
             Err(_) => return,
         };
+
         render_app
             .init_resource::<PixelatePipeline>()
             .init_resource::<SpecializedRenderPipelines<PixelatePipeline>>()
-            // .init_resource::<PixelateUniforms>()
             .add_system_to_stage(RenderStage::Prepare, prepare_pixelate_pipelines);
-        // .add_system_to_stage(RenderStage::Prepare, prepare_pixelate_uniforms);
 
         {
             let node = PixelateNode::new(&mut render_app.world);
@@ -290,34 +284,3 @@ fn prepare_pixelate_pipelines(
             .insert(CameraPixelatePipeline { pipeline_id });
     }
 }
-
-// Prepare the pixelate uniforms.
-// fn prepare_pixelate_uniforms(
-//     mut commands: Commands,
-//     render_device: Res<RenderDevice>,
-//     render_queue: Res<RenderQueue>,
-//     mut pixelate_uniforms: ResMut<PixelateUniforms>,
-//     pixelate_query: Query<(Entity, &Pixelate)>,
-// ) {
-//     pixelate_uniforms.uniforms.clear();
-
-//     let entities_and_uniform_indices = pixelate_query
-//         .iter()
-//         .map(|(e, pixelate)| {
-//             (
-//                 e,
-//                 PixelateUniformIndex(
-//                     pixelate_uniforms
-//                         .uniforms
-//                         .push(PixelateUniform::from(pixelate.clone())),
-//                 ),
-//             )
-//         })
-//         .collect::<Vec<_>>();
-
-//     commands.insert_or_spawn_batch(entities_and_uniform_indices);
-
-//     pixelate_uniforms
-//         .uniforms
-//         .write_buffer(&render_device, &render_queue);
-// }

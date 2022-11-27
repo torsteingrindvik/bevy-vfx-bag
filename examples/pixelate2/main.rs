@@ -7,7 +7,7 @@ use bevy::{
     window::{CreateWindow, PresentMode, WindowId},
 };
 
-use bevy_vfx_bag::post_processing::pixelate::{Pixelate, PixelatePlugin};
+use bevy_vfx_bag::post_processing2::pixelate::{Pixelate, PixelatePlugin};
 
 fn main() {
     let mut app = App::new();
