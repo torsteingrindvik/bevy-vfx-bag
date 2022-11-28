@@ -1,16 +1,7 @@
-use crate::{load_shader, post_processing2::util::PostProcessingPlugin};
-use bevy::{
-    asset::load_internal_asset,
-    ecs::query::QueryItem,
-    prelude::*,
-    reflect::TypeUuid,
-    render::{extract_component::ExtractComponent, render_resource::ShaderType},
-};
-
-use super::util;
+use crate::post_processing2::prelude::*;
 
 const PIXELATE_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 17030123524594138798);
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 15662737689711655455);
 
 /// Pixelation parameters.
 #[derive(Component, Clone)]

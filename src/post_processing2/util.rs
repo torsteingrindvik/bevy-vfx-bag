@@ -2,12 +2,14 @@ use std::{marker::PhantomData, num::NonZeroU64, sync::Mutex};
 
 use bevy::{
     core_pipeline::{core_2d, core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
+    ecs::component::ComponentDescriptor,
     prelude::*,
     render::{
         extract_component::{
             ComponentUniforms, DynamicUniformIndex, ExtractComponent, ExtractComponentPlugin,
             UniformComponentPlugin,
         },
+        globals::{GlobalsBuffer, GlobalsUniform},
         render_graph::{self, RenderGraph, SlotInfo, SlotType},
         render_phase::TrackedRenderPass,
         render_resource::{
@@ -16,7 +18,7 @@ use bevy::{
             BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
             FilterMode, FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
             RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-            SamplerBindingType, SamplerDescriptor, ShaderStages, ShaderType,
+            SamplerBindingType, SamplerDescriptor, ShaderDefVal, ShaderStages, ShaderType,
             SpecializedRenderPipeline, SpecializedRenderPipelines, TextureFormat,
             TextureSampleType, TextureViewDimension, TextureViewId,
         },
@@ -39,7 +41,7 @@ pub fn render_pipeline_descriptor(
         vertex: fullscreen_shader_vertex_state(),
         fragment: Some(FragmentState {
             shader: shader_handle,
-            shader_defs: vec![],
+            shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
             entry_point: "fragment".into(),
             targets: vec![Some(ColorTargetState {
                 format: texture_format,
@@ -84,8 +86,20 @@ pub fn bind_group_layout(
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(GlobalsUniform::min_size()),
+                        // min_binding_size: None,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
                         has_dynamic_offset: true,
                         min_binding_size: Some(uniform_min_size),
+                        // min_binding_size: None,
                     },
                     count: None,
                 },
@@ -251,7 +265,20 @@ where
             Err(_) => return,
         };
 
-        let bgl = bind_group_layout(&mut render_app.world, self.name, C::Out::min_size());
+        let min_size = C::Out::min_size();
+        info!(
+            "Min size {min_size:?}, component: {:?}",
+            ComponentDescriptor::new::<C::Out>()
+        );
+        let bgl = bind_group_layout(&mut render_app.world, self.name, min_size);
+
+        if let Some(_r) = render_app
+            .world
+            .get_resource::<PostProcessingLayout<C::Out>>()
+        {
+            panic!("Should be no such resource")
+        };
+        // .expect("Should be no such resource");
 
         render_app
             .insert_resource(PostProcessingLayout::<C::Out>::new(
@@ -350,6 +377,7 @@ where
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline_layout = world.resource::<PostProcessingLayout<U>>();
         let component_uniforms = world.resource::<ComponentUniforms<U>>();
+        let globals_buffer = world.resource::<GlobalsBuffer>();
 
         let (target, pipeline, uniform_index) = match self.query.get_manual(world, view_entity) {
             Ok(result) => result,
@@ -364,52 +392,96 @@ where
         let source = post_process.source;
         let destination = post_process.destination;
 
-        let mut cached_bind_group = self
-            .cached_texture_bind_group
-            .lock()
-            .expect("Lock not held");
+        // let mut cached_bind_group = self
+        //     .cached_texture_bind_group
+        //     .lock()
+        //     .expect("Lock not held");
+        let sampler = render_context
+            .render_device
+            .create_sampler(&SamplerDescriptor {
+                mipmap_filter: FilterMode::Linear,
+                mag_filter: FilterMode::Linear,
+                min_filter: FilterMode::Linear,
+                ..default()
+            });
 
-        let bind_group = match &mut *cached_bind_group {
-            Some((id, bind_group)) if source.id() == *id => bind_group,
-            cached_bind_group => {
-                let sampler = render_context
-                    .render_device
-                    .create_sampler(&SamplerDescriptor {
-                        mipmap_filter: FilterMode::Linear,
-                        mag_filter: FilterMode::Linear,
-                        min_filter: FilterMode::Linear,
-                        ..default()
-                    });
+        let bind_group = render_context
+            .render_device
+            .create_bind_group(&BindGroupDescriptor {
+                // label: Some(self.name),
+                label: None,
+                layout: &pipeline_layout.bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(source),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: globals_buffer
+                            .buffer
+                            .binding()
+                            .expect("Globals buffer should be available"), // .clone(),
+                    },
+                    BindGroupEntry {
+                        binding: 3,
+                        resource: component_uniforms.binding().expect("This should work?"),
+                    },
+                ],
+            });
 
-                let bind_group =
-                    render_context
-                        .render_device
-                        .create_bind_group(&BindGroupDescriptor {
-                            // label: Some(self.name),
-                            label: None,
-                            layout: &pipeline_layout.bind_group_layout,
-                            entries: &[
-                                BindGroupEntry {
-                                    binding: 0,
-                                    resource: BindingResource::TextureView(source),
-                                },
-                                BindGroupEntry {
-                                    binding: 1,
-                                    resource: BindingResource::Sampler(&sampler),
-                                },
-                                BindGroupEntry {
-                                    binding: 2,
-                                    resource: component_uniforms
-                                        .binding()
-                                        .expect("This should work?"),
-                                },
-                            ],
-                        });
+        // let bind_group = match &mut *cached_bind_group {
+        //     Some((id, bind_group)) if source.id() == *id => bind_group,
+        //     cached_bind_group => {
+        //         let sampler = render_context
+        //             .render_device
+        //             .create_sampler(&SamplerDescriptor {
+        //                 mipmap_filter: FilterMode::Linear,
+        //                 mag_filter: FilterMode::Linear,
+        //                 min_filter: FilterMode::Linear,
+        //                 ..default()
+        //             });
 
-                let (_, bind_group) = cached_bind_group.insert((source.id(), bind_group));
-                bind_group
-            }
-        };
+        //         let bind_group =
+        //             render_context
+        //                 .render_device
+        //                 .create_bind_group(&BindGroupDescriptor {
+        //                     // label: Some(self.name),
+        //                     label: None,
+        //                     layout: &pipeline_layout.bind_group_layout,
+        //                     entries: &[
+        //                         BindGroupEntry {
+        //                             binding: 0,
+        //                             resource: BindingResource::TextureView(source),
+        //                         },
+        //                         BindGroupEntry {
+        //                             binding: 1,
+        //                             resource: BindingResource::Sampler(&sampler),
+        //                         },
+        //                         BindGroupEntry {
+        //                             binding: 2,
+        //                             resource: globals_buffer
+        //                                 .buffer
+        //                                 .binding()
+        //                                 .expect("Globals buffer should be available"), // .clone(),
+        //                         },
+        //                         BindGroupEntry {
+        //                             binding: 3,
+        //                             resource: component_uniforms
+        //                                 .binding()
+        //                                 .expect("This should work?"),
+        //                         },
+        //                     ],
+        //                 });
+
+        //         let (_, bind_group) = cached_bind_group.insert((source.id(), bind_group));
+        //         bind_group
+        //     }
+        // };
 
         let pass_descriptor = RenderPassDescriptor {
             // label: Some(self.name),
@@ -429,7 +501,7 @@ where
         );
 
         render_pass.set_render_pipeline(pipeline);
-        render_pass.set_bind_group(0, bind_group, &[uniform_index.index()]);
+        render_pass.set_bind_group(0, &bind_group, &[uniform_index.index()]);
         render_pass.draw(0..3, 0..1);
 
         Ok(())
@@ -445,7 +517,12 @@ macro_rules! load_shader {
             let asset_server = $app.world.resource::<AssetServer>();
             asset_server.load($path_str)
         } else {
-            load_internal_asset!($app, $handle, $path_str, Shader::from_wgsl);
+            load_internal_asset!(
+                $app,
+                $handle,
+                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str),
+                Shader::from_wgsl
+            );
             $handle.typed()
         }
     }};

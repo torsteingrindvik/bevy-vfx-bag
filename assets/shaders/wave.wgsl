@@ -1,11 +1,13 @@
-#import bevy_sprite::mesh2d_view_bindings
+#import bevy_core_pipeline::fullscreen_vertex_shader
 #import bevy_pbr::utils
+#import bevy_pbr::mesh_view_types
 
-@group(1) @binding(0)
-var texture: texture_2d<f32>;
-
-@group(1) @binding(1)
-var our_sampler: sampler;
+@group(0) @binding(0)
+var source: texture_2d<f32>;
+@group(0) @binding(1)
+var source_sampler: sampler;
+@group(0) @binding(2)
+var<uniform> globals: Globals;
 
 struct Wave {
     waves_x: f32,
@@ -18,23 +20,18 @@ struct Wave {
     amplitude_y: f32
 };
 
-@group(1) @binding(2)
+@group(0) @binding(3)
 var<uniform> wave: Wave;
 
-fn fragment_impl(
-    position: vec4<f32>,
-    uv: vec2<f32>
-) -> vec4<f32> {
-    let pi_uv = PI * uv;
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    let pi_uv = PI * in.uv;
     let pi_time = PI * globals.time;
 
     let offset_x = sin((pi_uv.y * wave.waves_x) + (pi_time * wave.speed_x)) * wave.amplitude_x;
     let offset_y = sin((pi_uv.x * wave.waves_y) + (pi_time * wave.speed_y)) * wave.amplitude_y;
 
-    let uv_displaced = vec2<f32>(uv.x + offset_x, uv.y + offset_y);
+    let uv_displaced = vec2<f32>(in.uv.x + offset_x, in.uv.y + offset_y);
 
-    return vec4<f32>(textureSample(texture, our_sampler, uv_displaced).rgb, 1.0);
-
+    return textureSample(source, source_sampler, uv_displaced);
 }
-
-#import bevy_vfx_bag::post_processing_passthrough

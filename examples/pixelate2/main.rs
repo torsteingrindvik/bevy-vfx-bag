@@ -1,31 +1,41 @@
 #[path = "../examples_common.rs"]
 mod examples_common;
 
+use std::io::Write;
+
 use bevy::{
     prelude::*,
     render::camera::RenderTarget,
     window::{CreateWindow, PresentMode, WindowId},
 };
 
-use bevy_vfx_bag::post_processing2::pixelate::{Pixelate, PixelatePlugin};
+use bevy_vfx_bag::post_processing2::{
+    blur::{Blur, BlurPlugin},
+    chromatic_aberration::{ChromaticAberration, ChromaticAberrationPlugin},
+    flip::{self, Flip, FlipPlugin},
+    pixelate::{Pixelate, PixelatePlugin},
+    wave::{Wave, WavePlugin},
+};
 
 fn main() {
     let mut app = App::new();
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
+        .add_plugin(BlurPlugin)
         .add_plugin(PixelatePlugin)
+        .add_plugin(ChromaticAberrationPlugin)
+        .add_plugin(FlipPlugin)
+        .add_plugin(WavePlugin)
         .add_startup_system(startup);
-    // // .add_system(update)
-    // .run();
 
-    // let s = bevy_mod_debugdump::get_render_schedule(&mut app);
-    // let mut f = std::fs::File::create("pixelate-render-schedule.dot").unwrap();
-    // f.write_all(s.as_bytes()).unwrap();
+    let s = bevy_mod_debugdump::get_render_schedule(&mut app);
+    let mut f = std::fs::File::create("pixelate-render-schedule.dot").unwrap();
+    f.write_all(s.as_bytes()).unwrap();
 
-    // let s = bevy_mod_debugdump::get_render_graph(&mut app);
-    // let mut f = std::fs::File::create("pixelate-renderjV-graph.dot").unwrap();
-    // f.write_all(s.as_bytes()).unwrap();
+    let s = bevy_mod_debugdump::get_render_graph(&mut app);
+    let mut f = std::fs::File::create("pixelate-render-graph.dot").unwrap();
+    f.write_all(s.as_bytes()).unwrap();
 
     app.run();
 }
@@ -41,7 +51,6 @@ fn startup(mut commands: Commands, mut create_window_events: EventWriter<CreateW
             enabled: true,
             block_size: 10.0,
         },
-        // examples_common::LeftCamera,
     ));
 
     let window_id = WindowId::new();
@@ -69,10 +78,14 @@ fn startup(mut commands: Commands, mut create_window_events: EventWriter<CreateW
             },
             ..default()
         },
-        Pixelate {
+        Blur::default(),
+        Pixelate::default(),
+        ChromaticAberration::default(),
+        Flip {
             enabled: true,
-            block_size: 5.0,
+            direction: flip::Direction::Vertical,
         },
+        Wave::default(),
     ));
 
     // commands.spawn((

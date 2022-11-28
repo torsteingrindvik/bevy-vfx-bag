@@ -26,9 +26,6 @@ use crate::quad::window_sized_quad;
 const PASSTHROUGH_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 12989973502425583956);
 
-// Post processing effects.
-// pub mod post_processing;
-
 /// Post processing effects.
 pub mod post_processing2;
 
@@ -381,5 +378,66 @@ impl Plugin for BevyVfxBagPlugin {
                 setup_post_processing_2d_cameras,
             )
             .add_system(update);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // use std::marker::PhantomData;
+
+    // #[derive(Debug, Default, Resource)]
+    // struct R<T> {
+    //     marker: PhantomData<T>,
+    // }
+
+    // type T1 = u32;
+    // type T2 = i32;
+
+    trait Hi {
+        type X: Resource + Default;
+    }
+
+    #[derive(Default, Resource)]
+    struct FooR;
+
+    #[derive(Default, Resource)]
+    struct BarR;
+
+    struct Foo;
+
+    impl Hi for Foo {
+        type X = FooR;
+    }
+
+    struct Bar;
+
+    impl Hi for Bar {
+        type X = BarR;
+    }
+
+    fn resource_exists<T: Hi>(world: &World) -> bool {
+        world.get_resource::<T::X>().is_some()
+    }
+
+    fn init_resource<T: Hi>(app: &mut App) {
+        app.world.init_resource::<T::X>()
+    }
+
+    #[test]
+    fn resource_is_generically_unique() {
+        let mut app = App::new();
+
+        assert!(!resource_exists::<Foo>(&app.world));
+
+        init_resource::<Foo>(&mut app);
+        // app.init_resource::<<Foo as Hi>::X>();
+
+        assert!(resource_exists::<Foo>(&app.world));
+        assert!(!resource_exists::<Bar>(&app.world));
+
+        // assert!(app.world.get_resource::<R<T1>>().is_some());
+        // assert!(app.world.get_resource::<R<T2>>().is_none());
     }
 }
