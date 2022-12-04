@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, num::NonZeroU64, sync::Mutex};
+use std::{marker::PhantomData, num::NonZeroU64};
 
 use bevy::{
     core_pipeline::{core_2d, core_3d, fullscreen_vertex_shader::fullscreen_shader_vertex_state},
@@ -13,14 +13,14 @@ use bevy::{
         render_graph::{self, RenderGraph, SlotInfo, SlotType},
         render_phase::TrackedRenderPass,
         render_resource::{
-            encase::private::WriteInto, BindGroup, BindGroupDescriptor, BindGroupEntry,
-            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
-            BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
-            FilterMode, FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
+            encase::private::WriteInto, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+            BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
+            BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites, FilterMode,
+            FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
             RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
             SamplerBindingType, SamplerDescriptor, ShaderDefVal, ShaderStages, ShaderType,
             SpecializedRenderPipeline, SpecializedRenderPipelines, TextureFormat,
-            TextureSampleType, TextureViewDimension, TextureViewId,
+            TextureSampleType, TextureViewDimension,
         },
         renderer::RenderDevice,
         texture::BevyDefault,
@@ -28,6 +28,12 @@ use bevy::{
         RenderApp, RenderStage,
     },
 };
+
+// pub(crate) trait BindGroupLayoutBuilder {
+//     fn extra_bind_group_layout() -> Option<BindGroupLayoutDescriptor<'static>>;
+
+//     fn extra_bind_group_layout() -> Option<BindGroupLayoutDescriptor<'static>>;
+// }
 
 pub fn render_pipeline_descriptor(
     label: &'static str,
@@ -342,7 +348,7 @@ struct PostProcessingNode<U: Component> {
         ),
         With<ExtractedView>,
     >,
-    cached_texture_bind_group: Mutex<Option<(TextureViewId, BindGroup)>>,
+    // cached_texture_bind_group: Mutex<Option<(TextureViewId, BindGroup)>>,
     // name: &'static str,
 }
 
@@ -350,7 +356,7 @@ impl<U: Component> FromWorld for PostProcessingNode<U> {
     fn from_world(world: &mut World) -> Self {
         Self {
             query: QueryState::new(world),
-            cached_texture_bind_group: Mutex::new(None),
+            // cached_texture_bind_group: Mutex::new(None),
         }
     }
 }
@@ -501,6 +507,10 @@ where
         );
 
         render_pass.set_render_pipeline(pipeline);
+        // TODO: Make a default bind group here with source and destination.
+        // Always set that as index 0.
+
+        // TODO: Change to index 1 here and in shaders.
         render_pass.set_bind_group(0, &bind_group, &[uniform_index.index()]);
         render_pass.draw(0..3, 0..1);
 
@@ -524,6 +534,35 @@ macro_rules! load_shader {
                 Shader::from_wgsl
             );
             $handle.typed()
+        }
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! load_image {
+    ($app: ident, $handle: ident, $path_str: expr) => {{
+        if cfg!(feature = "dev") {
+            let asset_server = $app.world.resource::<AssetServer>();
+            asset_server.load($path_str)
+        } else {
+            use bevy::render::texture::{CompressedImageFormats, ImageType};
+            let mut image_assets = $app
+                .world
+                .get_resource_mut::<Assets<Image>>()
+                .expect("Should have Assets<Image>");
+
+            let image_bytes =
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str));
+            let image = Image::from_buffer(
+                image_bytes,
+                ImageType::Extension("tga"),
+                CompressedImageFormats::NONE,
+                true,
+            )
+            .expect("TGA should load properly");
+
+            image_assets.add(image)
         }
     }};
 }
