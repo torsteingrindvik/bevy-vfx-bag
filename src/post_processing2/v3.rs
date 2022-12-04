@@ -1,4 +1,4 @@
-use std::{any::TypeId, marker::PhantomData, sync::Mutex};
+use std::{marker::PhantomData, sync::Mutex};
 
 use bevy::{
     core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
@@ -14,9 +14,9 @@ use bevy::{
         mesh::MeshVertexBufferLayout,
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
-            sort_phase_system, CachedRenderPipelinePhaseItem, DrawFunctionId, DrawFunctions,
-            EntityRenderCommand, PhaseItem, RenderCommandResult, RenderPhase, SetItemPipeline,
-            TrackedRenderPass,
+            sort_phase_system, AddRenderCommand, CachedRenderPipelinePhaseItem, DrawFunctionId,
+            DrawFunctions, EntityPhaseItem, EntityRenderCommand, PhaseItem, RenderCommandResult,
+            RenderPhase, SetItemPipeline, TrackedRenderPass,
         },
         render_resource::{
             AsBindGroup, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
@@ -142,7 +142,7 @@ fn queue_post_processing_shared_bind_group(
     // uniforms: Res<ComponentUniforms<BloomUniform>>,
 
     // TODO: Identify somehow which view targets are being used by post processing.
-    views: Query<(Entity, &ViewTarget), With<RaindropsMarker>>,
+    views: Query<(Entity, &ViewTarget), With<RaindropsSettings>>,
 ) {
     for (_, view_target) in &views {
         let id = view_target.main_texture().id();
@@ -189,9 +189,17 @@ fn queue_post_processing_shared_bind_group(
 /// Points to a matching pipeline- it will for example point to a specific fragment shader as well as
 /// having a bind group specialized for the material.
 pub struct PostProcessingPhaseItem {
+    entity: Entity,
     sort_key: FloatOrd,
     draw_function: DrawFunctionId,
     pipeline_id: CachedRenderPipelineId,
+}
+
+// Needed for this to be a render command.
+impl EntityPhaseItem for PostProcessingPhaseItem {
+    fn entity(&self) -> Entity {
+        self.entity
+    }
 }
 
 impl PhaseItem for PostProcessingPhaseItem {
@@ -268,6 +276,7 @@ impl FromWorld for PostProcessingSharedLayout {
 pub struct PostProcessingLayout<M: Material2d> {
     shared: PostProcessingSharedLayout,
     material_layout: BindGroupLayout,
+    fragment_shader: Handle<Shader>,
     marker: PhantomData<M>,
 }
 
@@ -279,15 +288,18 @@ where
         let shared = world
             .get_resource::<PostProcessingSharedLayout>()
             .expect("Shared layout should be available");
-        let material_layout = world
+        let material_pipeline = world
             .get_resource::<Material2dPipeline<M>>()
-            .expect("Resource should be available")
-            .material2d_layout
-            .clone();
+            .expect("Resource should be available");
 
         Self {
             shared: shared.clone(),
-            material_layout,
+            material_layout: material_pipeline.material2d_layout.clone(),
+            fragment_shader: material_pipeline
+                .fragment_shader
+                .as_ref()
+                .expect("Should have fragment shader set")
+                .clone(),
             marker: PhantomData,
         }
     }
@@ -297,10 +309,13 @@ impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M> {
     type Key = ();
 
     fn specialize(&self, _key: Self::Key) -> RenderPipelineDescriptor {
-        let shader = match M::fragment_shader() {
-            ShaderRef::Handle(handle) => handle,
-            _others => unimplemented!("ShaderRef non-handle is not supported"),
-        };
+        // let shader = match M::fragment_shader() {
+        //     ShaderRef::Handle(handle) => handle,
+        //     ShaderRef::Default => panic!("Default shader not supported for post processing"),
+        //     ShaderRef::Path(path) => {
+        //         panic!("Shader path not supported for post processing: {path:?}")
+        //     }
+        // };
 
         RenderPipelineDescriptor {
             label: Some("PostProcessing pipeline".into()),
@@ -313,7 +328,7 @@ impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M> {
             depth_stencil: None,
             multisample: MultisampleState::default(),
             fragment: Some(FragmentState {
-                shader,
+                shader: self.fragment_shader.clone(),
                 // TODO: Get rid of this when Bevy supports it.
                 shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
                 entry_point: "fragment".into(),
@@ -413,35 +428,60 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
         With<C>,
     >,
 ) {
-    for (_, mut phase, ordering) in views.iter_mut() {
-        info!(
-            "Adding post processing phase items: {:?}",
-            TypeId::of::<C>()
+    for (entity, mut phase, ordering) in views.iter_mut() {
+        debug!(
+            "Adding post processing phase items: {:?}+{:?}",
+            std::any::type_name::<M>(),
+            std::any::type_name::<C>()
         );
 
         let pipeline_id = pipelines.specialize(&mut pipeline_cache, &pipeline, ());
 
         let draw_function = draw_functions.read().id::<DrawPostProcessingItem<M>>();
+        // let draw_function = draw_functions.read().id::<DrawPostProcessingItem>();
+        debug!("Draw function found, adding phase item: {entity:?}");
 
         phase.add(PostProcessingPhaseItem {
             sort_key: FloatOrd(ordering.map(|ordering| ordering.0).unwrap_or_default()), // todo
             draw_function,
             pipeline_id,
+            entity,
         })
     }
 }
 
+#[derive(Debug, ShaderType, Clone)]
+struct RaindropsUniform {
+    time_scaling: f32,
+    intensity: f32,
+    zoom: f32,
+}
+
+impl Default for RaindropsUniform {
+    fn default() -> Self {
+        Self {
+            time_scaling: 0.8,
+            intensity: 0.03,
+            zoom: 1.0,
+        }
+    }
+}
+
+/// TODO
 #[derive(Debug, AsBindGroup, TypeUuid, Clone)]
 #[uuid = "4fba30ae-73e6-11ed-8575-9b008b9044f0"]
-struct Raindrops {
+pub struct Raindrops {
     #[texture(0)]
     #[sampler(1)]
-    color_texture: Option<Handle<Image>>,
+    color_texture: Handle<Image>,
+
+    #[uniform(2)]
+    raindrops: RaindropsUniform,
 }
 
 impl Material2d for Raindrops {
     fn fragment_shader() -> ShaderRef {
-        ShaderRef::Default
+        "shaders/raindrops3.wgsl".into()
     }
 
     fn specialize(
@@ -453,10 +493,25 @@ impl Material2d for Raindrops {
     }
 }
 
+/// TODO
 #[derive(Debug, Component, Clone, Copy)]
-struct RaindropsMarker;
+pub struct RaindropsSettings {
+    time_scaling: f32,
+    intensity: f32,
+    zoom: f32,
+}
 
-impl ExtractComponent for RaindropsMarker {
+impl Default for RaindropsSettings {
+    fn default() -> Self {
+        Self {
+            time_scaling: 0.8,
+            intensity: 0.03,
+            zoom: 1.0,
+        }
+    }
+}
+
+impl ExtractComponent for RaindropsSettings {
     type Query = &'static Self;
     type Filter = ();
     type Out = Self;
@@ -472,7 +527,21 @@ pub struct Pluginz {}
 impl Plugin for Pluginz {
     fn build(&self, app: &mut App) {
         app.add_plugin(Material2dPlugin::<Raindrops>::default())
-            .add_plugin(ExtractComponentPlugin::<RaindropsMarker>::default());
+            .add_plugin(ExtractComponentPlugin::<RaindropsSettings>::default());
+        // .add_system(add_raindrops_asset);
+
+        // app.world.resource_mut::<Assets<Raindrops>>().set_untracked(
+        //     Handle::<Raindrops>::default(),
+        //     Raindrops {
+        //         color_texture: None,
+        //         raindrops: Default::default(),
+        //     },
+        // );
+
+        // info!(
+        //     "RaindropsMarker type id: {:?}",
+        //     TypeId::of::<RaindropsSettings>()
+        // );
 
         let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
         util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
@@ -483,11 +552,13 @@ impl Plugin for Pluginz {
             .init_resource::<PostProcessingSharedLayout>()
             .init_resource::<PostProcessingLayout<Raindrops>>()
             .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Raindrops>>>()
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
+            // .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem>()
             .add_system_to_stage(RenderStage::Extract, extract_post_processing_camera_phases)
             .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
             .add_system_to_stage(
                 RenderStage::Queue,
-                queue_post_processing_phase_items::<Raindrops, RaindropsMarker>,
+                queue_post_processing_phase_items::<Raindrops, RaindropsSettings>,
             )
             .add_system_to_stage(
                 RenderStage::PhaseSort,
@@ -496,15 +567,98 @@ impl Plugin for Pluginz {
     }
 }
 
+/// THing
+#[derive(Debug, Bundle, Clone)]
+pub struct RaindropsBundle {
+    settings: RaindropsSettings,
+    material: Handle<Raindrops>,
+}
+
+impl RaindropsBundle {
+    /// todo
+    pub fn new(
+        settings: RaindropsSettings,
+        raindrop_assets: &mut Assets<Raindrops>,
+        asset_server: &AssetServer,
+    ) -> Self {
+        Self {
+            settings,
+            material: raindrop_assets.add(Raindrops {
+                color_texture: asset_server.load("textures/raindrops.tga"),
+                raindrops: RaindropsUniform {
+                    time_scaling: settings.time_scaling,
+                    intensity: settings.intensity,
+                    zoom: settings.zoom,
+                },
+            }),
+        }
+    }
+}
+
 fn extract_post_processing_camera_phases(
     mut commands: Commands,
-    cameras: Extract<Query<(Entity, &Camera), With<RaindropsMarker>>>,
+    cameras: Extract<Query<(Entity, &Camera), With<RaindropsSettings>>>,
+    // mut materials: ResMut<Assets<Raindrops>>,
+    // asset_server: Res<AssetServer>,
 ) {
     for (entity, camera) in &cameras {
         if camera.is_active {
+            // materials
             commands
                 .get_or_spawn(entity)
                 .insert(RenderPhase::<PostProcessingPhaseItem>::default());
         }
     }
 }
+
+// fn add_raindrops_asset(
+//     mut commands: Commands,
+//     views: Query<(Entity, &Camera), With<RaindropsSettings>>,
+// ) {
+// }
+
+// fn fixup_texture(
+//     // mut done: Local<bool>,
+//     mut ev_asset: EventReader<AssetEvent<Image>>,
+//     mut assets: ResMut<Assets<Image>>,
+//     raindrops_assets: Res<Assets<Raindrops>>,
+//     // mut raindrop_materials: ResMut<Assets<RaindropsMaterial>>,
+// ) {
+//     // if *done {
+//     //     return;
+//     // }
+
+//     for ev in ev_asset.iter() {
+//         if let AssetEvent::Created { handle } = ev {
+//             if *handle == raindrops_texture.0 {
+//                 *done = true;
+
+//                 let image = assets
+//                     .get_mut(handle)
+//                     .expect("Handle should point to asset");
+
+//                 image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
+//                     label: Some("Raindrops Sampler"),
+//                     address_mode_u: AddressMode::Repeat,
+//                     address_mode_v: AddressMode::Repeat,
+//                     address_mode_w: AddressMode::Repeat,
+//                     ..default()
+//                 });
+
+//                 let format = TextureFormat::Rgba8Unorm;
+//                 image.texture_descriptor.format = format;
+
+//                 image.texture_view_descriptor = Some(TextureViewDescriptor {
+//                     label: Some("Raindrops TextureViewDescriptor"),
+//                     format: Some(format),
+//                     dimension: Some(TextureViewDimension::D2),
+//                     ..default()
+//                 });
+
+//                 for (_, material) in raindrop_materials.iter_mut() {
+//                     material.raindrops_image = Some(handle.clone());
+//                 }
+//             }
+//         }
+//     }
+// }

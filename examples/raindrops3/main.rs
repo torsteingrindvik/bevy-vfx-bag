@@ -3,11 +3,7 @@ mod examples_common;
 
 use std::io::Write;
 
-use bevy::{
-    prelude::*,
-    render::camera::RenderTarget,
-    window::{CreateWindow, PresentMode, WindowId},
-};
+use bevy::prelude::*;
 
 // use bevy_vfx_bag::post_processing2::{
 //     blur::{Blur, BlurPlugin},
@@ -17,7 +13,7 @@ use bevy::{
 //     wave::{Wave, WavePlugin},
 // };
 
-use bevy_vfx_bag::post_processing2::v3::Pluginz;
+use bevy_vfx_bag::post_processing2::v3::{Pluginz, Raindrops, RaindropsBundle, RaindropsSettings};
 
 fn main() {
     let mut app = App::new();
@@ -27,31 +23,40 @@ fn main() {
         .add_plugin(Pluginz {})
         .add_startup_system(startup);
 
-    let s = bevy_mod_debugdump::get_render_schedule(&mut app);
-    let mut f = std::fs::File::create("pixelate-render-schedule.dot").unwrap();
-    f.write_all(s.as_bytes()).unwrap();
+    // let s = bevy_mod_debugdump::get_render_schedule(&mut app);
+    // let mut f = std::fs::File::create("pixelate-render-schedule.dot").unwrap();
+    // f.write_all(s.as_bytes()).unwrap();
 
-    let s = bevy_mod_debugdump::get_render_graph(&mut app);
-    let mut f = std::fs::File::create("pixelate-render-graph.dot").unwrap();
-    f.write_all(s.as_bytes()).unwrap();
+    // let s = bevy_mod_debugdump::get_render_graph(&mut app);
+    // let mut f = std::fs::File::create("pixelate-render-graph.dot").unwrap();
+    // f.write_all(s.as_bytes()).unwrap();
 
     app.run();
 }
 
-fn startup(mut commands: Commands, mut create_window_events: EventWriter<CreateWindow>) {
+fn startup(
+    mut commands: Commands,
+    // mut create_window_events: EventWriter<CreateWindow>,
+    mut raindrop_assets: ResMut<Assets<Raindrops>>,
+    asset_server: Res<AssetServer>,
+) {
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_xyz(-5.0, 12., 10.0)
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
         },
-        // Pixelate {
-        //     enabled: true,
-        //     block_size: 10.0,
-        // },
+        RaindropsBundle::new(
+            RaindropsSettings::default(),
+            &mut raindrop_assets,
+            &asset_server,
+        ), // RaindropsSettings, // Pixelate {
+           //     enabled: true,
+           //     block_size: 10.0,
+           // },
     ));
 
-    let window_id = WindowId::new();
+    // let window_id = WindowId::new();
 
     // sends out a "CreateWindow" event, which will be received by the windowing backend
     // create_window_events.send(CreateWindow {
