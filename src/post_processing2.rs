@@ -7,23 +7,23 @@ pub mod v3;
 /// To simplify imports.
 pub(crate) mod prelude;
 
-/// Pixelation effect.
-pub mod blur;
+// // Pixelation effect.
+// pub mod blur;
 
-/// Chromatic aberration effect.
-pub mod chromatic_aberration;
+// // Chromatic aberration effect.
+// pub mod chromatic_aberration;
 
-/// Flip effect.
-pub mod flip;
+// // Flip effect.
+// pub mod flip;
 
-/// Pixelation effect.
-pub mod pixelate;
+// // Pixelation effect.
+// pub mod pixelate;
 
-/// Raindrops effect.
-pub mod raindrops;
+// // Raindrops effect.
+// pub mod raindrops;
 
-/// Raindrops effect.
-pub mod raindrops2;
+// // Raindrops effect.
+// pub mod raindrops2;
 
-/// Wave effect.
-pub mod wave;
+// // Wave effect.
+// pub mod wave;

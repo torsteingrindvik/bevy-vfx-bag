@@ -1,8 +1,6 @@
 #[path = "../examples_common.rs"]
 mod examples_common;
 
-use std::io::Write;
-
 use bevy::prelude::*;
 
 // use bevy_vfx_bag::post_processing2::{
@@ -13,14 +11,16 @@ use bevy::prelude::*;
 //     wave::{Wave, WavePlugin},
 // };
 
-use bevy_vfx_bag::post_processing2::v3::{Pluginz, Raindrops, RaindropsBundle, RaindropsSettings};
+use bevy_vfx_bag::post_processing2::v3::{
+    PixelateSettings, PostProcessingPlugin, RaindropsSettings,
+};
 
 fn main() {
     let mut app = App::new();
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(Pluginz {})
+        .add_plugin(PostProcessingPlugin {})
         .add_startup_system(startup);
 
     // let s = bevy_mod_debugdump::get_render_schedule(&mut app);
@@ -37,8 +37,6 @@ fn main() {
 fn startup(
     mut commands: Commands,
     // mut create_window_events: EventWriter<CreateWindow>,
-    mut raindrop_assets: ResMut<Assets<Raindrops>>,
-    asset_server: Res<AssetServer>,
 ) {
     commands.spawn((
         Camera3dBundle {
@@ -46,14 +44,8 @@ fn startup(
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
         },
-        RaindropsBundle::new(
-            RaindropsSettings::default(),
-            &mut raindrop_assets,
-            &asset_server,
-        ), // RaindropsSettings, // Pixelate {
-           //     enabled: true,
-           //     block_size: 10.0,
-           // },
+        PixelateSettings::default(),
+        RaindropsSettings::default(),
     ));
 
     // let window_id = WindowId::new();

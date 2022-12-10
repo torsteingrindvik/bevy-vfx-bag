@@ -11,7 +11,6 @@ use bevy::{
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         globals::{GlobalsBuffer, GlobalsUniform},
-        mesh::MeshVertexBufferLayout,
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
             sort_phase_system, AddRenderCommand, CachedRenderPipelinePhaseItem, DrawFunctionId,
@@ -19,32 +18,47 @@ use bevy::{
             RenderPhase, SetItemPipeline, TrackedRenderPass,
         },
         render_resource::{
-            AsBindGroup, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-            BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-            BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites, FilterMode,
-            FragmentState, MultisampleState, Operations, PipelineCache, PrimitiveState,
-            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-            SamplerBindingType, SamplerDescriptor, ShaderDefVal, ShaderRef, ShaderStages,
-            ShaderType, SpecializedMeshPipelineError, SpecializedRenderPipeline,
+            AddressMode, AsBindGroup, BindGroup, BindGroupDescriptor, BindGroupEntry,
+            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
+            BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
+            FilterMode, FragmentState, LoadOp, MultisampleState, Operations, PipelineCache,
+            PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+            RenderPipelineDescriptor, SamplerBindingType, SamplerDescriptor, ShaderDefVal,
+            ShaderRef, ShaderStages, ShaderType, SpecializedRenderPipeline,
             SpecializedRenderPipelines, TextureSampleType, TextureViewDimension, TextureViewId,
         },
         renderer::{RenderContext, RenderDevice},
-        texture::BevyDefault,
+        texture::{BevyDefault, ImageSampler},
         view::{ExtractedView, ViewTarget},
         Extract, RenderApp, RenderStage,
     },
-    sprite::{
-        Material2d, Material2dKey, Material2dPipeline, Material2dPlugin, SetMaterial2dBindGroup,
-    },
+    sprite::{Material2d, Material2dPipeline, Material2dPlugin, SetMaterial2dBindGroup},
     utils::{FloatOrd, HashMap},
 };
 
+use crate::{load_image, shader_ref};
+
 use super::util;
 
+// The draw steps performed on a post processing phase item.
 type DrawPostProcessingItem<M> = (
+    // The pipeline must be set in order to use the correct bind group,
+    // access the correct shaders, and so on.
     SetItemPipeline,
+    // Common to post processing items is that they all use the same
+    // first bind group, which has the input texture (the scene) and
+    // the sampler for that.
     SetTextureAndSampler<0>,
+    // The second bind group is specific to the post processing item.
+    // It's typically used to pass in parameters to the shader.
+    //
+    // We don't have to define this bind group ourselves- the material derive
+    // does that for us.
+    // But we have to set it.
     SetMaterial2dBindGroup<M, 1>,
+    // Lastly we draw vertices.
+    // This is simple for a post processing effect, since we just draw
+    // a full screen triangle.
     DrawPostProcessing,
 );
 
@@ -75,6 +89,9 @@ impl<const I: usize> EntityRenderCommand for SetTextureAndSampler<I> {
             *lock.as_ref().expect("Source view id should be set")
         };
 
+        // Here we fetch the bind group associated with the given texture.
+        // This should have been prepared earlier in the render schedule.
+        // See [`queue_post_processing_shared_bind_group`].
         let bind_group = bind_groups
             .into_inner()
             .cached_texture_bind_groups
@@ -133,53 +150,55 @@ impl FromWorld for PostProcessingNode {
     }
 }
 
+// TODO: Should we just create these directly when the user asks for it in the node run?
+// This way we don't have to have access to "main_texture_other"
 fn queue_post_processing_shared_bind_group(
-    // mut commands: Commands,
     render_device: Res<RenderDevice>,
     globals: Res<GlobalsBuffer>,
     layout: Res<PostProcessingSharedLayout>,
     mut bind_groups: ResMut<PostProcessingBindGroups>,
-    // uniforms: Res<ComponentUniforms<BloomUniform>>,
 
-    // TODO: Identify somehow which view targets are being used by post processing.
-    views: Query<(Entity, &ViewTarget), With<RaindropsSettings>>,
+    views: Query<(Entity, &ViewTarget), AnyOf<(&RaindropsSettings, &PixelateSettings)>>,
 ) {
     for (_, view_target) in &views {
-        let id = view_target.main_texture().id();
-
-        if !bind_groups.cached_texture_bind_groups.contains_key(&id) {
-            bind_groups.cached_texture_bind_groups.insert(
-                id,
-                render_device.create_bind_group(&BindGroupDescriptor {
-                    label: Some("PostProcessing texture bind group"),
-                    layout: &layout.textures_layout,
-                    entries: &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: BindingResource::TextureView(view_target.main_texture()),
-                        },
-                        BindGroupEntry {
-                            binding: 1,
-                            resource: BindingResource::Sampler(&render_device.create_sampler(
-                                &SamplerDescriptor {
-                                    label: Some("PostProcessing texture sampler"),
-                                    mag_filter: FilterMode::Linear,
-                                    min_filter: FilterMode::Linear,
-                                    mipmap_filter: FilterMode::Linear,
-                                    ..default()
-                                },
-                            )),
-                        },
-                        BindGroupEntry {
-                            binding: 2,
-                            resource: globals
-                                .buffer
-                                .binding()
-                                .expect("Globals buffer should be available"),
-                        },
-                    ],
-                }),
-            );
+        for texture_view in [view_target.main_texture(), view_target.main_texture_other()] {
+            if !bind_groups
+                .cached_texture_bind_groups
+                .contains_key(&texture_view.id())
+            {
+                bind_groups.cached_texture_bind_groups.insert(
+                    texture_view.id(),
+                    render_device.create_bind_group(&BindGroupDescriptor {
+                        label: Some("PostProcessing texture bind group"),
+                        layout: &layout.textures_layout,
+                        entries: &[
+                            BindGroupEntry {
+                                binding: 0,
+                                resource: BindingResource::TextureView(texture_view),
+                            },
+                            BindGroupEntry {
+                                binding: 1,
+                                resource: BindingResource::Sampler(&render_device.create_sampler(
+                                    &SamplerDescriptor {
+                                        label: Some("PostProcessing texture sampler"),
+                                        mag_filter: FilterMode::Linear,
+                                        min_filter: FilterMode::Linear,
+                                        mipmap_filter: FilterMode::Linear,
+                                        ..default()
+                                    },
+                                )),
+                            },
+                            BindGroupEntry {
+                                binding: 2,
+                                resource: globals
+                                    .buffer
+                                    .binding()
+                                    .expect("Globals buffer should be available"),
+                            },
+                        ],
+                    }),
+                );
+            }
         }
     }
 }
@@ -370,7 +389,11 @@ impl Node for PostProcessingNode {
 
         let draw_functions = world.resource::<DrawFunctions<PostProcessingPhaseItem>>();
         let mut draw_functions = draw_functions.write();
+
+        let mut has_cleared = false;
+
         for item in &phase.items {
+            // for _ in 0..=1 {
             let post_process = target.post_process_write();
             let source = post_process.source;
             let destination = post_process.destination;
@@ -386,7 +409,18 @@ impl Node for PostProcessingNode {
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: destination,
                     resolve_target: None,
-                    ops: Operations::default(),
+                    ops: if has_cleared {
+                        Operations {
+                            load: LoadOp::Load,
+                            store: true,
+                        }
+                    } else {
+                        has_cleared = true;
+                        Operations {
+                            load: LoadOp::Clear(Default::default()),
+                            store: true,
+                        }
+                    },
                 })],
                 depth_stencil_attachment: None,
             };
@@ -401,6 +435,7 @@ impl Node for PostProcessingNode {
                 .get_mut(item.draw_function)
                 .expect("Should get draw function");
             draw_function.draw(world, &mut render_pass, view_entity, item);
+            // }
         }
 
         Ok(())
@@ -450,6 +485,164 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
     }
 }
 
+/// TODO
+pub struct PostProcessingPlugin {}
+
+#[derive(Default, Resource)]
+struct Handles {
+    // raindrops_shader: Handle<Shader>,
+    raindrops_texture: Handle<Image>,
+}
+
+impl Plugin for PostProcessingPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugin(Material2dPlugin::<Raindrops>::default())
+            .add_plugin(Material2dPlugin::<Pixelate>::default())
+            .add_plugin(ExtractComponentPlugin::<RaindropsSettings>::default())
+            .add_plugin(ExtractComponentPlugin::<PixelateSettings>::default());
+
+        // let h = ImageTextureLoader;
+
+        let handles = Handles {
+            // raindrops_shader: load_shader!(app, RAINDROPS_SHADER_HANDLE, "shaders/raindrops.wgsl"),
+            raindrops_texture: load_image!(
+                app,
+                // RAINDROPS_TEXTURE_HANDLE,
+                "textures/raindrops.tga",
+                "tga"
+            ),
+        };
+
+        info!("Handle in res: {:?}", handles.raindrops_texture);
+        // info!("Handle global: {:?}", RAINDROPS_TEXTURE_HANDLE);
+
+        app.insert_resource(handles)
+            .add_system(fixup_assets)
+            .add_system(raindrops_add_material)
+            .add_system(pixelate_add_material);
+
+        let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
+        util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
+
+        render_app
+            .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
+            .init_resource::<PostProcessingBindGroups>()
+            .init_resource::<PostProcessingSharedLayout>()
+            .init_resource::<PostProcessingLayout<Raindrops>>()
+            .init_resource::<PostProcessingLayout<Pixelate>>()
+            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Raindrops>>>()
+            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Pixelate>>>()
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Pixelate>>()
+            .add_system_to_stage(RenderStage::Extract, extract_post_processing_camera_phases)
+            .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
+            .add_system_to_stage(
+                RenderStage::Queue,
+                queue_post_processing_phase_items::<Raindrops, RaindropsSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Queue,
+                queue_post_processing_phase_items::<Pixelate, PixelateSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::PhaseSort,
+                sort_phase_system::<PostProcessingPhaseItem>,
+            );
+    }
+}
+
+// const RAINDROPS_SHADER_HANDLE: HandleUntyped =
+//     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 14785543643812289755);
+
+#[allow(clippy::type_complexity)]
+fn extract_post_processing_camera_phases(
+    mut commands: Commands,
+    cameras: Extract<Query<(Entity, &Camera), AnyOf<(&RaindropsSettings, &PixelateSettings)>>>,
+) {
+    for (entity, camera) in &cameras {
+        if camera.is_active {
+            commands
+                .get_or_spawn(entity)
+                .insert(RenderPhase::<PostProcessingPhaseItem>::default());
+        }
+    }
+}
+
+fn fixup_assets(
+    mut ev_asset: EventReader<AssetEvent<Image>>,
+    mut assets: ResMut<Assets<Image>>,
+    handles: Res<Handles>,
+    mut raindrop_materials: ResMut<Assets<Raindrops>>,
+) {
+    for ev in ev_asset.iter() {
+        if let AssetEvent::Created { handle } = ev {
+            info!("Handle to asset created: {:?}", handle);
+            if *handle == handles.raindrops_texture {
+                info!("Handle was raindrops texture");
+
+                let image = assets
+                    .get_mut(handle)
+                    .expect("Handle should point to asset");
+
+                image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
+                    label: Some("Repeat Sampler"),
+                    address_mode_u: AddressMode::Repeat,
+                    address_mode_v: AddressMode::Repeat,
+                    address_mode_w: AddressMode::Repeat,
+                    ..default()
+                });
+
+                // let format = TextureFormat::Rgba8Unorm;
+                // image.texture_descriptor.format = format;
+
+                // image.texture_view_descriptor = Some(TextureViewDescriptor {
+                //     label: Some("Raindrops TextureViewDescriptor"),
+                //     format: Some(format),
+                //     dimension: Some(TextureViewDimension::D2),
+                //     ..default()
+                // });
+
+                for (_, _material) in raindrop_materials.iter_mut() {
+                    // This mutable "access" is needed to trigger the usage of the new sampler.
+                    info!("Material is pointing to: {:?}", _material.color_texture);
+                }
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// RAINDROPS
+////////////////////////////////////////////////////////////////////////////////
+
+// #[cfg(not(feature = "dev"))]
+const RAINDROPS_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10304902298789658536);
+
+// #[cfg(not(feature = "dev"))]
+// const RAINDROPS_TEXTURE_HANDLE: HandleUntyped =
+//     HandleUntyped::weak_from_u64(Image::TYPE_UUID, 9363411587132811616);
+
+#[allow(clippy::type_complexity)]
+fn raindrops_add_material(
+    mut commands: Commands,
+    mut assets: ResMut<Assets<Raindrops>>,
+    handles: Res<Handles>,
+    cameras: Query<(Entity, &RaindropsSettings), (With<Camera>, Without<Handle<Raindrops>>)>,
+) {
+    for (entity, settings) in cameras.iter() {
+        let material_handle = assets.add(Raindrops {
+            color_texture: handles.raindrops_texture.clone(),
+            raindrops: RaindropsUniform {
+                time_scaling: settings.time_scaling,
+                intensity: settings.intensity,
+                zoom: settings.zoom,
+            },
+        });
+        commands.entity(entity).insert(material_handle);
+    }
+}
+
 #[derive(Debug, ShaderType, Clone)]
 struct RaindropsUniform {
     time_scaling: f32,
@@ -481,15 +674,9 @@ pub struct Raindrops {
 
 impl Material2d for Raindrops {
     fn fragment_shader() -> ShaderRef {
-        "shaders/raindrops3.wgsl".into()
-    }
+        shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops3.wgsl")
 
-    fn specialize(
-        _descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayout,
-        _key: Material2dKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        Ok(())
+        // "shaders/raindrops3.wgsl".into()
     }
 }
 
@@ -521,144 +708,67 @@ impl ExtractComponent for RaindropsSettings {
     }
 }
 
-/// TODO
-pub struct Pluginz {}
+////////////////////////////////////////////////////////////////////////////////
+// PIXELATE
+////////////////////////////////////////////////////////////////////////////////
 
-impl Plugin for Pluginz {
-    fn build(&self, app: &mut App) {
-        app.add_plugin(Material2dPlugin::<Raindrops>::default())
-            .add_plugin(ExtractComponentPlugin::<RaindropsSettings>::default());
-        // .add_system(add_raindrops_asset);
+const PIXELATE_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11093977931118718560);
 
-        // app.world.resource_mut::<Assets<Raindrops>>().set_untracked(
-        //     Handle::<Raindrops>::default(),
-        //     Raindrops {
-        //         color_texture: None,
-        //         raindrops: Default::default(),
-        //     },
-        // );
-
-        // info!(
-        //     "RaindropsMarker type id: {:?}",
-        //     TypeId::of::<RaindropsSettings>()
-        // );
-
-        let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
-        util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
-
-        render_app
-            .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
-            .init_resource::<PostProcessingBindGroups>()
-            .init_resource::<PostProcessingSharedLayout>()
-            .init_resource::<PostProcessingLayout<Raindrops>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Raindrops>>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
-            // .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem>()
-            .add_system_to_stage(RenderStage::Extract, extract_post_processing_camera_phases)
-            .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Raindrops, RaindropsSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::PhaseSort,
-                sort_phase_system::<PostProcessingPhaseItem>,
-            );
-    }
-}
-
-/// THing
-#[derive(Debug, Bundle, Clone)]
-pub struct RaindropsBundle {
-    settings: RaindropsSettings,
-    material: Handle<Raindrops>,
-}
-
-impl RaindropsBundle {
-    /// todo
-    pub fn new(
-        settings: RaindropsSettings,
-        raindrop_assets: &mut Assets<Raindrops>,
-        asset_server: &AssetServer,
-    ) -> Self {
-        Self {
-            settings,
-            material: raindrop_assets.add(Raindrops {
-                color_texture: asset_server.load("textures/raindrops.tga"),
-                raindrops: RaindropsUniform {
-                    time_scaling: settings.time_scaling,
-                    intensity: settings.intensity,
-                    zoom: settings.zoom,
-                },
-            }),
-        }
-    }
-}
-
-fn extract_post_processing_camera_phases(
+#[allow(clippy::type_complexity)]
+fn pixelate_add_material(
     mut commands: Commands,
-    cameras: Extract<Query<(Entity, &Camera), With<RaindropsSettings>>>,
-    // mut materials: ResMut<Assets<Raindrops>>,
-    // asset_server: Res<AssetServer>,
+    mut assets: ResMut<Assets<Pixelate>>,
+    cameras: Query<(Entity, &PixelateSettings), (With<Camera>, Without<Handle<Pixelate>>)>,
 ) {
-    for (entity, camera) in &cameras {
-        if camera.is_active {
-            // materials
-            commands
-                .get_or_spawn(entity)
-                .insert(RenderPhase::<PostProcessingPhaseItem>::default());
-        }
+    for (entity, settings) in cameras.iter() {
+        let material_handle = assets.add(Pixelate {
+            pixelate: PixelateUniform {
+                block_size: settings.block_size,
+            },
+        });
+        commands.entity(entity).insert(material_handle);
     }
 }
 
-// fn add_raindrops_asset(
-//     mut commands: Commands,
-//     views: Query<(Entity, &Camera), With<RaindropsSettings>>,
-// ) {
-// }
+#[derive(Debug, ShaderType, Clone)]
+struct PixelateUniform {
+    block_size: f32,
+}
 
-// fn fixup_texture(
-//     // mut done: Local<bool>,
-//     mut ev_asset: EventReader<AssetEvent<Image>>,
-//     mut assets: ResMut<Assets<Image>>,
-//     raindrops_assets: Res<Assets<Raindrops>>,
-//     // mut raindrop_materials: ResMut<Assets<RaindropsMaterial>>,
-// ) {
-//     // if *done {
-//     //     return;
-//     // }
+/// TODO
+#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[uuid = "485141dc-7890-11ed-9cf4-ab2aa4ee03b0"]
+pub struct Pixelate {
+    #[uniform(0)]
+    pixelate: PixelateUniform,
+}
 
-//     for ev in ev_asset.iter() {
-//         if let AssetEvent::Created { handle } = ev {
-//             if *handle == raindrops_texture.0 {
-//                 *done = true;
+impl Material2d for Pixelate {
+    fn fragment_shader() -> ShaderRef {
+        shader_ref!(PIXELATE_SHADER_HANDLE, "shaders/pixelate3.wgsl")
+        // "shaders/pixelate3.wgsl".into()
+    }
+}
 
-//                 let image = assets
-//                     .get_mut(handle)
-//                     .expect("Handle should point to asset");
+/// TODO
+#[derive(Debug, Component, Clone, Copy)]
+pub struct PixelateSettings {
+    block_size: f32,
+}
 
-//                 image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-//                     label: Some("Raindrops Sampler"),
-//                     address_mode_u: AddressMode::Repeat,
-//                     address_mode_v: AddressMode::Repeat,
-//                     address_mode_w: AddressMode::Repeat,
-//                     ..default()
-//                 });
+impl Default for PixelateSettings {
+    fn default() -> Self {
+        Self { block_size: 4.0 }
+    }
+}
 
-//                 let format = TextureFormat::Rgba8Unorm;
-//                 image.texture_descriptor.format = format;
+impl ExtractComponent for PixelateSettings {
+    type Query = &'static Self;
+    type Filter = ();
+    type Out = Self;
 
-//                 image.texture_view_descriptor = Some(TextureViewDescriptor {
-//                     label: Some("Raindrops TextureViewDescriptor"),
-//                     format: Some(format),
-//                     dimension: Some(TextureViewDimension::D2),
-//                     ..default()
-//                 });
-
-//                 for (_, material) in raindrop_materials.iter_mut() {
-//                     material.raindrops_image = Some(handle.clone());
-//                 }
-//             }
-//         }
-//     }
-// }
+    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        Some(*item)
+    }
+}

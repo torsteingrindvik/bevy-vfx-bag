@@ -527,6 +527,7 @@ macro_rules! load_shader {
             let asset_server = $app.world.resource::<AssetServer>();
             asset_server.load($path_str)
         } else {
+            use bevy::asset::load_internal_asset;
             load_internal_asset!(
                 $app,
                 $handle,
@@ -541,28 +542,44 @@ macro_rules! load_shader {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! load_image {
-    ($app: ident, $handle: ident, $path_str: expr) => {{
+    ($app: ident, $path_str: expr, $ext:literal) => {{
         if cfg!(feature = "dev") {
             let asset_server = $app.world.resource::<AssetServer>();
             asset_server.load($path_str)
         } else {
+            // use bevy::render::texture::ImageTextureLoader;
             use bevy::render::texture::{CompressedImageFormats, ImageType};
-            let mut image_assets = $app
-                .world
-                .get_resource_mut::<Assets<Image>>()
-                .expect("Should have Assets<Image>");
-
-            let image_bytes =
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str));
-            let image = Image::from_buffer(
-                image_bytes,
-                ImageType::Extension("tga"),
-                CompressedImageFormats::NONE,
-                true,
+            // load_internal_asset!($app, $handle, $path_str, Image::from_bytes);
+            let mut assets = $app.world.resource_mut::<Assets<_>>();
+            assets.add(
+                // $handle,
+                (Image::from_buffer)(
+                    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str)),
+                    ImageType::Extension($ext),
+                    CompressedImageFormats::NONE,
+                    true,
+                )
+                .expect("image should load"),
             )
-            .expect("TGA should load properly");
+            // $handle.typed()
 
-            image_assets.add(image)
+            // use bevy::render::texture::{CompressedImageFormats, ImageType};
+            // let mut image_assets = $app
+            //     .world
+            //     .get_resource_mut::<Assets<Image>>()
+            //     .expect("Should have Assets<Image>");
+
+            // let image_bytes =
+            //     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str));
+            // let image = Image::from_buffer(
+            //     image_bytes,
+            //     ImageType::Extension("tga"),
+            //     CompressedImageFormats::NONE,
+            //     true,
+            // )
+            // .expect("TGA should load properly");
+
+            // image_assets.add(image)
         }
     }};
 }
