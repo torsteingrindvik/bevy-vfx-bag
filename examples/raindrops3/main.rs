@@ -12,7 +12,7 @@ use bevy::prelude::*;
 // };
 
 use bevy_vfx_bag::post_processing2::v3::{
-    PixelateSettings, PostProcessingPlugin, RaindropsSettings,
+    PixelateSettings, PostProcessingPlugin, RaindropsSettings, VfxOrdering,
 };
 
 fn main() {
@@ -46,6 +46,7 @@ fn startup(
         },
         PixelateSettings::default(),
         RaindropsSettings::default(),
+        VfxOrdering::<PixelateSettings>::new(-1.0),
     ));
 
     // let window_id = WindowId::new();

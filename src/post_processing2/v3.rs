@@ -444,8 +444,30 @@ impl Node for PostProcessingNode {
 
 /// Decide on ordering for post processing effects.
 /// TODO: Describe if higher values or lower values means first.
-#[derive(Debug, Component)]
-pub struct VfxOrdering(f32);
+#[derive(Debug, Component, Copy)]
+pub struct VfxOrdering<C> {
+    priority: f32,
+    marker: PhantomData<C>,
+}
+
+impl<C> Clone for VfxOrdering<C> {
+    fn clone(&self) -> Self {
+        Self {
+            priority: self.priority,
+            marker: self.marker,
+        }
+    }
+}
+
+impl<C> VfxOrdering<C> {
+    /// Create a new ordering. TODO
+    pub fn new(priority: f32) -> Self {
+        Self {
+            priority,
+            marker: PhantomData,
+        }
+    }
+}
 
 /// Adds the phase items. Each time one is added it means that a render pass for the effect will be performed.
 #[allow(clippy::complexity)]
@@ -458,7 +480,8 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
         (
             Entity,
             &mut RenderPhase<PostProcessingPhaseItem>,
-            Option<&VfxOrdering>,
+            // Option<&VfxOrdering>,
+            &VfxOrdering<C>,
         ),
         With<C>,
     >,
@@ -477,7 +500,7 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
         debug!("Draw function found, adding phase item: {entity:?}");
 
         phase.add(PostProcessingPhaseItem {
-            sort_key: FloatOrd(ordering.map(|ordering| ordering.0).unwrap_or_default()), // todo
+            sort_key: FloatOrd(ordering.priority),
             draw_function,
             pipeline_id,
             entity,
@@ -534,7 +557,14 @@ impl Plugin for PostProcessingPlugin {
             .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Pixelate>>>()
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Pixelate>>()
-            .add_system_to_stage(RenderStage::Extract, extract_post_processing_camera_phases)
+            .add_system_to_stage(
+                RenderStage::Extract,
+                extract_post_processing_camera_phases::<RaindropsSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Extract,
+                extract_post_processing_camera_phases::<PixelateSettings>,
+            )
             .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
             .add_system_to_stage(
                 RenderStage::Queue,
@@ -555,15 +585,26 @@ impl Plugin for PostProcessingPlugin {
 //     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 14785543643812289755);
 
 #[allow(clippy::type_complexity)]
-fn extract_post_processing_camera_phases(
+fn extract_post_processing_camera_phases<C: Component>(
     mut commands: Commands,
-    cameras: Extract<Query<(Entity, &Camera), AnyOf<(&RaindropsSettings, &PixelateSettings)>>>,
+    cameras: Extract<
+        Query<
+            (Entity, &Camera, Option<&VfxOrdering<C>>),
+            AnyOf<(&RaindropsSettings, &PixelateSettings)>,
+        >,
+    >,
 ) {
-    for (entity, camera) in &cameras {
+    for (entity, camera, maybe_ordering) in &cameras {
         if camera.is_active {
+            let ordering = if let Some(o) = maybe_ordering {
+                o.clone()
+            } else {
+                VfxOrdering::new(0.0)
+            };
+
             commands
                 .get_or_spawn(entity)
-                .insert(RenderPhase::<PostProcessingPhaseItem>::default());
+                .insert((RenderPhase::<PostProcessingPhaseItem>::default(), ordering));
         }
     }
 }
@@ -759,7 +800,7 @@ pub struct PixelateSettings {
 
 impl Default for PixelateSettings {
     fn default() -> Self {
-        Self { block_size: 4.0 }
+        Self { block_size: 8.0 }
     }
 }
 
