@@ -1,15 +1,11 @@
 #[path = "../examples_common.rs"]
 mod examples_common;
 
-use bevy::prelude::*;
-
-// use bevy_vfx_bag::post_processing2::{
-//     blur::{Blur, BlurPlugin},
-//     chromatic_aberration::{ChromaticAberration, ChromaticAberrationPlugin},
-//     flip::{self, Flip, FlipPlugin},
-//     pixelate::{Pixelate, PixelatePlugin},
-//     wave::{Wave, WavePlugin},
-// };
+use bevy::{
+    prelude::*,
+    render::camera::RenderTarget,
+    window::{CreateWindow, PresentMode, WindowId},
+};
 
 use bevy_vfx_bag::post_processing2::v3::{
     PixelateSettings, PostProcessingPlugin, RaindropsSettings, VfxOrdering,
@@ -21,7 +17,11 @@ fn main() {
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_plugin(PostProcessingPlugin {})
-        .add_startup_system(startup);
+        .insert_resource(Effects(["Pixelate", "Raindrops"]))
+        .add_startup_system(startup)
+        .add_system(change_selection)
+        .add_system(update_order::<Window1>)
+        .add_system(update_order::<Window2>);
 
     // let s = bevy_mod_debugdump::get_render_schedule(&mut app);
     // let mut f = std::fs::File::create("pixelate-render-schedule.dot").unwrap();
@@ -34,9 +34,17 @@ fn main() {
     app.run();
 }
 
+#[derive(Component, Clone, Copy)]
+struct Window1;
+
+#[derive(Component, Clone, Copy)]
+struct Window2;
+
 fn startup(
     mut commands: Commands,
-    // mut create_window_events: EventWriter<CreateWindow>,
+    mut create_window_events: EventWriter<CreateWindow>,
+    asset_server: Res<AssetServer>,
+    effects: Res<Effects>,
 ) {
     commands.spawn((
         Camera3dBundle {
@@ -46,84 +54,187 @@ fn startup(
         },
         PixelateSettings::default(),
         RaindropsSettings::default(),
-        VfxOrdering::<PixelateSettings>::new(-1.0),
+        VfxOrdering::<RaindropsSettings>::new(0.0),
+        VfxOrdering::<PixelateSettings>::new(0.0),
+        Window1,
     ));
 
-    // let window_id = WindowId::new();
+    let window_id = WindowId::new();
 
     // sends out a "CreateWindow" event, which will be received by the windowing backend
-    // create_window_events.send(CreateWindow {
-    //     id: window_id,
-    //     descriptor: WindowDescriptor {
-    //         width: 800.,
-    //         height: 600.,
-    //         present_mode: PresentMode::AutoNoVsync,
-    //         title: "Second window".to_string(),
-    //         ..default()
-    //     },
-    // });
+    create_window_events.send(CreateWindow {
+        id: window_id,
+        descriptor: WindowDescriptor {
+            width: 800.,
+            height: 600.,
+            present_mode: PresentMode::AutoNoVsync,
+            title: "Second window".to_string(),
+            ..default()
+        },
+    });
 
     // second window camera
-    // commands.spawn((
-    //     Camera3dBundle {
-    //         transform: Transform::from_xyz(-5.0, 12., 10.0)
-    //             .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
-    //         camera: Camera {
-    //             target: RenderTarget::Window(window_id),
-    //             ..default()
-    //         },
-    //         ..default()
-    //     },
-    //     Blur::default(),
-    //     Pixelate::default(),
-    //     ChromaticAberration::default(),
-    //     Flip {
-    //         enabled: true,
-    //         direction: flip::Direction::Vertical,
-    //     },
-    //     Wave::default(),
-    // ));
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(-5.0, 12., 10.0)
+                .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
+            camera: Camera {
+                target: RenderTarget::Window(window_id),
+                ..default()
+            },
+            ..default()
+        },
+        PixelateSettings::default(),
+        RaindropsSettings::default(),
+        // TODO: Insert defaults of these
+        VfxOrdering::<RaindropsSettings>::new(0.0),
+        VfxOrdering::<PixelateSettings>::new(0.0),
+        Window2,
+    ));
 
-    // commands.spawn((
-    //     Camera3dBundle {
-    //         transform: Transform::from_xyz(0.0, 6., 12.0)
-    //             .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
-    //         camera: Camera {
-    //             priority: 1, // To clear up ambiguities
-    //             ..default()
-    //         },
-    //         camera_3d: Camera3d {
-    //             clear_color: ClearColorConfig::None, // To not overwrite previous camera's work
-    //             ..default()
-    //         },
-    //         ..default()
-    //     },
-    //     Pixelate {
-    //         enabled: true,
-    //         block_size: 50.0,
-    //     },
-    //     examples_common::RightCamera,
-    // ));
+    let make_list = || {
+        // Create a TextBundle that has a Text with a single section.
+        TextBundle::from_sections(effects.0.iter().map(|&s| TextSection {
+            value: format!("{s}\n"),
+            style: TextStyle {
+                font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                font_size: 30.0,
+                color: Color::WHITE,
+            },
+        }))
+        .with_style(Style {
+            margin: UiRect::all(Val::Px(10.0)),
+            ..default()
+        })
+    };
+
+    commands
+        .spawn((NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                align_items: AlignItems::FlexStart,
+                padding: UiRect::all(Val::Px(10.0)),
+                justify_content: JustifyContent::FlexStart,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            ..default()
+        },))
+        .with_children(|parent| {
+            parent.spawn(make_list()).insert((
+                Selection::default(),
+                Window1,
+                WindowRelation(WindowId::primary()),
+            ));
+            parent.spawn(make_list()).insert((
+                Selection::default(),
+                Window2,
+                WindowRelation(window_id),
+            ));
+        });
 }
 
-// fn update(keyboard_input: Res<Input<KeyCode>>, mut text: ResMut<examples_common::ExampleText>) {
-//     let mut pixelate_diff = 0.0;
+#[derive(Component)]
+struct WindowRelation(WindowId);
 
-//     if keyboard_input.just_pressed(KeyCode::P) {
-//         // passthrough.0 = !passthrough.0;
-//     }
+#[derive(Debug, Component)]
+enum Change {
+    Up,
+    Down,
+    Toggle,
+}
 
-//     if keyboard_input.just_pressed(KeyCode::Up) {
-//         pixelate_diff = 1.0;
-//     } else if keyboard_input.just_pressed(KeyCode::Down) {
-//         pixelate_diff = -1.0;
-//     }
+fn change_selection(
+    mut commands: Commands,
+    keyboard_input: Res<Input<KeyCode>>,
+    mut query: Query<(Entity, &WindowRelation), With<Text>>,
+    windows: Res<Windows>,
+) {
+    for window in windows.iter() {
+        if window.is_focused() {
+            for (entity, window_id) in query.iter_mut() {
+                if window_id.0 == window.id() {
+                    if keyboard_input.just_pressed(KeyCode::Space) {
+                        commands.entity(entity).insert(Change::Toggle);
+                    }
 
-//     // pixelate.block_size += pixelate_diff;
-//     // pixelate.block_size = 1.0_f32.max(pixelate.block_size);
+                    if keyboard_input.just_pressed(KeyCode::Up) {
+                        commands.entity(entity).insert(Change::Up);
+                    } else if keyboard_input.just_pressed(KeyCode::Down) {
+                        commands.entity(entity).insert(Change::Down);
+                    }
+                }
+            }
+        }
+    }
+}
 
-//     // text.0 = format!(
-//     //     "Pixelate block size (↑↓): {:.2?}, [P]assthrough: {:?}",
-//     //     pixelate.block_size, passthrough.0
-//     // );
-// }
+#[derive(Debug, Component, Default)]
+pub struct Selection {
+    is_selected: bool,
+    line_pointed_to: usize,
+}
+
+#[derive(Resource)]
+struct Effects([&'static str; 2]);
+
+#[allow(clippy::type_complexity)]
+fn update_order<C: Component>(
+    mut commands: Commands,
+    mut selection: Local<Selection>,
+    mut text: Query<(Entity, &mut Text, &Change), (With<C>, Added<Change>)>,
+    mut pixelate: Query<&mut VfxOrdering<PixelateSettings>, With<C>>,
+    mut raindrops: Query<&mut VfxOrdering<RaindropsSettings>, With<C>>,
+) {
+    let (entity, mut text, change) = match text.get_single_mut() {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+
+    commands.entity(entity).remove::<Change>();
+
+    let previous_index = selection.line_pointed_to;
+
+    match change {
+        Change::Up => selection.line_pointed_to = selection.line_pointed_to.saturating_sub(1),
+        Change::Down => {
+            selection.line_pointed_to = (selection.line_pointed_to + 1).min(text.sections.len() - 1)
+        }
+        Change::Toggle => selection.is_selected = !selection.is_selected,
+    }
+
+    if previous_index != selection.line_pointed_to && selection.is_selected {
+        let sections = &mut text.sections;
+        sections.swap(selection.line_pointed_to, previous_index);
+    }
+
+    let mut priority = 0.0;
+
+    for (index, section) in text.sections.iter_mut().enumerate() {
+        let color = if selection.line_pointed_to == index && selection.is_selected {
+            Color::GOLD
+        } else if selection.line_pointed_to == index {
+            Color::BEIGE
+        } else {
+            Color::WHITE
+        };
+
+        section.style.color = color;
+
+        match section.value.as_str().trim() {
+            "Pixelate" => {
+                for mut order in pixelate.iter_mut() {
+                    order.priority = priority;
+                }
+            }
+            "Raindrops" => {
+                for mut order in raindrops.iter_mut() {
+                    order.priority = priority;
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        priority += 1.;
+    }
+}

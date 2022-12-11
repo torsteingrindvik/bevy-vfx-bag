@@ -446,7 +446,8 @@ impl Node for PostProcessingNode {
 /// TODO: Describe if higher values or lower values means first.
 #[derive(Debug, Component, Copy)]
 pub struct VfxOrdering<C> {
-    priority: f32,
+    /// Priority
+    pub priority: f32,
     marker: PhantomData<C>,
 }
 

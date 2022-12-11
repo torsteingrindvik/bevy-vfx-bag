@@ -39,7 +39,7 @@ fn startup(mut commands: Commands) {
 }
 
 // Switch flip modes every second.
-fn update(mut flip: ResMut<Flip>, mut text: ResMut<examples_common::ExampleText>) {
+fn update(mut flip: ResMut<Flip>, mut text: ResMut<examples_common::SwappableList>) {
     *flip = match *flip {
         Flip::None => Flip::Horizontal,
         Flip::Horizontal => Flip::Vertical,

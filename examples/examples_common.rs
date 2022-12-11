@@ -6,6 +6,7 @@ use bevy::{
     window::WindowResized,
 };
 use core::f32::consts::PI;
+use std::marker::PhantomData;
 
 /// Adds some "sane defaults" for showing examples/development:
 ///
@@ -14,27 +15,77 @@ use core::f32::consts::PI;
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
 
-#[derive(Debug, Resource)]
-pub struct ExampleText(pub String);
+// #[derive(Debug, Resource, Default)]
+// pub struct ExampleTexts(Vec<SwappableList>);
 
-impl Default for ExampleText {
-    fn default() -> Self {
-        Self("Loading...".into())
+#[derive(Debug, Component, Resource, Default)]
+pub struct SwappableList {
+    lines: Vec<String>,
+    is_selected: bool,
+    line_pointed_to: usize,
+    // Maybe no need?
+    // marker: PhantomData<C>,
+}
+
+impl SwappableList {
+    pub fn new<S: AsRef<str>>(lines: impl IntoIterator<Item = S>) -> Self {
+        Self {
+            lines: lines.into_iter().map(|s| s.as_ref().to_string()).collect(),
+            ..default()
+        }
+    }
+
+    pub fn lines(&self) -> impl Iterator<Item = &String> {
+        self.lines.iter()
+    }
+
+    pub fn toggle_selected(&mut self) {
+        self.is_selected = !self.is_selected;
+    }
+
+    pub fn up(&mut self) {
+        let pointed_to_before = self.line_pointed_to;
+        self.line_pointed_to = pointed_to_before.saturating_sub(1);
+
+        if self.is_selected {
+            self.lines.swap(self.line_pointed_to, pointed_to_before);
+        }
+    }
+
+    pub fn down(&mut self) {
+        let pointed_to_before = self.line_pointed_to;
+        self.line_pointed_to = (self.line_pointed_to + 1).min(self.lines.len() - 1);
+
+        if self.is_selected {
+            self.lines.swap(self.line_pointed_to, pointed_to_before);
+        }
     }
 }
 
+// impl Default for ExampleText {
+//     fn default() -> Self {
+//         Self {
+//             lines: String::new(),
+//             is_selected:todo!(),
+//             line_pointed_to: todo!(),
+
+//         }
+//     }
+// }
+
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ExampleText>()
-            .add_plugins(
-                DefaultPlugins
-                    .set(AssetPlugin {
-                        watch_for_changes: true,
-                        ..default()
-                    })
-                    .set(ImagePlugin::default_nearest()),
-            )
-            .add_system(bevy::window::close_on_esc);
+        app.add_plugins(
+            DefaultPlugins
+                .set(AssetPlugin {
+                    watch_for_changes: true,
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        )
+        // .add_system(button_color_changer)
+        // .add_system(button_selector)
+        .add_system(bevy::window::close_on_esc);
     }
 }
 
@@ -74,8 +125,9 @@ impl Plugin for ShapesExamplePlugin {
             .add_startup_system(ui::setup)
             .add_system(set_camera_viewports)
             .add_system(shapes::rotate)
-            .add_system(ui::fps_text_update)
-            .add_system(ui::ui_text_update);
+            .add_system(ui::fps_text_update);
+        // .add_system(ui::ui_change_text)
+        // .add_system(ui::ui_change_selection);
     }
 }
 
@@ -219,6 +271,27 @@ mod ui {
     #[derive(Component)]
     pub(crate) struct UiText;
 
+    // #[derive(Resource, Default)]
+    // pub(crate) struct TextSelection {
+    //     index: usize,
+    //     is_selected: bool,
+    // }
+
+    // impl TextSelection {
+    //     pub(crate) fn toggle(&mut self) {
+    //         self.is_selected = !self.is_selected;
+    //     }
+
+    //     pub(crate) fn next(&mut self) {
+    //         // Out of bounds check is handled by the UI system
+    //         self.index = (self.index + 1);
+    //     }
+
+    //     pub(crate) fn previous(&mut self) {
+    //         self.index = self.index.saturating_sub(1);
+    //     }
+    // }
+
     pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         // UI camera
         // commands.spawn_bundle(Camera2dBundle::default());
@@ -227,8 +300,7 @@ mod ui {
             .spawn(
                 // Create a TextBundle that has a Text with a single section.
                 TextBundle::from_section(
-                    // Accepts a `String` or any type that converts into a `String`, such as `&str`
-                    "hello\nbevy!",
+                    "",
                     TextStyle {
                         font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                         font_size: 30.0,
@@ -249,6 +321,7 @@ mod ui {
                 }),
             )
             .insert(UiText);
+
         // Text with multiple sections
         commands
             .spawn(
@@ -282,14 +355,73 @@ mod ui {
             .insert(FpsText);
     }
 
-    pub(crate) fn ui_text_update(
-        message: Res<ExampleText>,
-        mut query: Query<&mut Text, With<UiText>>,
-    ) {
-        for mut text in &mut query {
-            text.sections[0].value = message.0.clone();
-        }
-    }
+    // pub(crate) fn ui_change_text(
+    //     example_texts: Res<ExampleTexts>,
+    //     mut query: Query<&mut Text, With<UiText>>,
+    // ) {
+    //     if !example_texts.is_changed() {
+    //         return;
+    //     }
+
+    //     let mut text = query.single_mut();
+
+    //     let is_selected = example_text.is_selected;
+    //     let list_index = example_text.line_pointed_to;
+
+    //     *text = Text::from_sections(example_text.lines.iter().enumerate().map(|(index, line)| {
+    //         let color = if is_selected && index == list_index {
+    //             Color::GOLD
+    //         } else {
+    //             Color::WHITE
+    //         };
+    //         let prefix = if index == list_index { "> " } else { "  " };
+
+    //         TextSection::new(
+    //             format!("{prefix}{line}\n"),
+    //             TextStyle {
+    //                 font: text.sections[0].style.font.clone(),
+    //                 font_size: text.sections[0].style.font_size,
+    //                 color,
+    //             },
+    //         )
+    //     }));
+    //     // for mut text in &mut query {
+    //     // text.sections[0].value = message.0.clone();
+    //     // }
+    // }
+
+    // pub(crate) fn ui_change_selection(
+    //     // selection: Res<TextSelection>,
+    //     mut query: Query<&mut Text, With<UiText>>,
+    // ) {
+    //     if !selection.is_changed() {
+    //         return;
+    //     }
+
+    //     let mut text = query.single_mut();
+
+    //     for (index, section) in text.sections.iter_mut().enumerate() {
+    //         if selection.is_selected && selection.index == index {
+    //             section.style.color = Color::GOLD;
+    //         } else {
+    //             section.style.color = Color::WHITE;
+    //         }
+    //     }
+
+    //     // *text = Text::from_sections(message.0.lines().map(|line| {
+    //     //     TextSection::new(
+    //     //         format!("{line}\n"),
+    //     //         TextStyle {
+    //     //             font: text.sections[0].style.font.clone(),
+    //     //             font_size: text.sections[0].style.font_size,
+    //     //             color: text.sections[0].style.color,
+    //     //         },
+    //     //     )
+    //     // }));
+    //     // for mut text in &mut query {
+    //     // text.sections[0].value = message.0.clone();
+    //     // }
+    // }
 
     pub(crate) fn fps_text_update(
         diagnostics: Res<Diagnostics>,
@@ -347,6 +479,297 @@ fn set_camera_viewports(
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// MENU STUFF
+// See https://github.com/bevyengine/bevy/blob/main/examples/games/game_menu.rs
+////////////////////////////////////////////////////////////////////////////////
+// const TEXT_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
+// const BUTTON_LIST_BACKGROUND: Color = Color::rgba(0.3, 0.0, 0.3, 0.15);
+
+// const NORMAL_BUTTON: Color = Color::rgba(0.15, 0.15, 0.15, 0.7);
+// const HOVERED_BUTTON: Color = Color::rgba(0.25, 0.25, 0.25, 0.7);
+// const HOVERED_PRESSED_BUTTON: Color = Color::rgba(0.25, 0.65, 0.25, 0.7);
+// const PRESSED_BUTTON: Color = Color::rgba(0.35, 0.75, 0.35, 0.7);
+
+// // Tag component used to mark wich setting is currently selected
+// #[derive(Component)]
+// pub struct SelectedOption;
+
+// fn button_color_changer(
+//     mut interaction_query: Query<
+//         (&Interaction, &mut BackgroundColor, Option<&SelectedOption>),
+//         (Changed<Interaction>, With<Button>),
+//     >,
+// ) {
+//     for (interaction, mut color, selected) in &mut interaction_query {
+//         *color = match (*interaction, selected) {
+//             (Interaction::Clicked, _) | (Interaction::None, Some(_)) => PRESSED_BUTTON.into(),
+//             (Interaction::Hovered, Some(_)) => HOVERED_PRESSED_BUTTON.into(),
+//             (Interaction::Hovered, None) => HOVERED_BUTTON.into(),
+//             (Interaction::None, None) => NORMAL_BUTTON.into(),
+//         }
+//     }
+// }
+
+// This system updates the settings when a new value for a setting is selected, and marks
+// the button as the one currently selected
+// pub fn button_selector(
+//     interaction_query: Query<
+//         (&Interaction, Entity),
+//         (Changed<Interaction>, With<Button>, Without<ButtonArrow>),
+//     >,
+//     mut selected_query: Query<(Entity, &mut BackgroundColor), With<SelectedOption>>,
+//     mut commands: Commands,
+//     // mut setting: ResMut<T>,
+// ) {
+//     for (interaction, entity) in &interaction_query {
+//         if *interaction == Interaction::Clicked {
+//             let (previous_button, mut previous_color) = selected_query.single_mut();
+//             *previous_color = NORMAL_BUTTON.into();
+//             commands.entity(previous_button).remove::<SelectedOption>();
+//             commands.entity(entity).insert(SelectedOption);
+//             // *setting = *button_setting;
+//         }
+//     }
+// }
+
+// trait RelatesToButton {
+//     fn related_button(&self) -> Option<Entity>;
+// }
+
+// pub fn button_arrows_handler<
+//     C: Component + Display + Ord + Clone + RelatesToButton,
+//     T: Resource + Clone + IntoIterator<Item = C>,
+// >(
+//     interaction_query: Query<(&Interaction, &ButtonArrow), Changed<Interaction>>,
+//     // mut selected_query: Query<(Entity, &mut BackgroundColor), With<SelectedOption>>,
+//     mut commands: Commands,
+//     mut buttons: ResMut<T>,
+// ) {
+//     for (interaction, button_arrow) in &interaction_query {
+//         if *interaction == Interaction::Clicked {
+//             let ButtonArrow {
+//                 direction,
+//                 related_setting,
+//             } = button_arrow;
+
+//             let sorted_buttons = buttons.clone().into_iter().find(|c| c == related_setting);
+
+//             // let component_to_insert = if direction == &ButtonArrowDirection::Up {
+//             //     Bu
+//             // } else {
+//             //     SelectedOption
+//             // };
+
+//             // commands.entity(*related_setting).insert(SelectedOption);
+
+//             // let (previous_button, mut previous_color) = selected_query.single_mut();
+//             // *previous_color = NORMAL_BUTTON.into();
+//             // commands.entity(previous_button).remove::<SelectedOption>();
+//             // commands.entity(entity).insert(SelectedOption);
+//             // *setting = *button_setting;
+//         }
+//     }
+// }
+
+// #[derive(Component, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+// enum ButtonArrowDirection {
+//     Up,
+//     Down,
+// }
+
+// #[derive(Component, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+// enum ButtonArrowDirection {
+//     Up,
+//     Down,
+// }
+
+// #[derive(Component, Clone, Copy)]
+// pub struct ButtonArrow {
+//     direction: ButtonArrowDirection,
+//     related_setting: Entity,
+// }
+
+// Make a list of buttons for each thing in the list.
+// The items in the list must implement display such that they can be displayed as text on the button.
+// Also the items must be ordered so that the list can be sorted.
+// This allows the list to change order at runtime, and the buttons will be updated to match.
+// pub fn buttons_list<
+//     C: Component + Display + Ord + Clone,
+//     T: Resource + Clone + IntoIterator<Item = C>,
+// >(
+//     mut commands: Commands,
+//     asset_server: Res<AssetServer>,
+//     listable: Res<T>,
+// ) {
+//     if !listable.is_changed() {
+//         return;
+//     }
+
+//     let button_style = Style {
+//         size: Size::new(Val::Px(200.0), Val::Px(40.0)),
+//         margin: UiRect::all(Val::Px(10.0)),
+//         justify_content: JustifyContent::Center,
+//         align_items: AlignItems::Center,
+//         ..default()
+//     };
+//     let button_text_style = TextStyle {
+//         font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+//         font_size: 20.0,
+//         color: TEXT_COLOR,
+//     };
+
+//     commands
+//         // This is a container, spans the whole screen?
+//         .spawn((NodeBundle {
+//             style: Style {
+//                 size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+//                 align_items: AlignItems::Center,
+//                 justify_content: JustifyContent::FlexStart,
+//                 padding: UiRect::all(Val::Px(10.0)),
+//                 ..default()
+//             },
+//             ..default()
+//         },))
+//         .with_children(|parent| {
+//             parent
+//                 .spawn(NodeBundle {
+//                     style: Style {
+//                         flex_direction: FlexDirection::Column,
+//                         align_items: AlignItems::FlexStart,
+//                         ..default()
+//                     },
+//                     ..default()
+//                 })
+//                 .with_children(|parent| {
+//                     parent
+//                         // This is the area where the buttons are displayed
+//                         .spawn(NodeBundle {
+//                             style: Style {
+//                                 flex_direction: FlexDirection::Column,
+//                                 align_items: AlignItems::Center,
+//                                 ..default()
+//                             },
+//                             background_color: Color::SEA_GREEN.into(),
+//                             ..default()
+//                         })
+//                         .with_children(|parent| {
+//                             // Each child here is an individual "button group"
+
+//                             parent.spawn(TextBundle::from_section(
+//                                 "Effects",
+//                                 button_text_style.clone(),
+//                             ));
+
+//                             let mut list = listable.clone().into_iter().collect::<Vec<_>>();
+//                             list.sort_unstable();
+
+//                             // Display a button for each possible value
+//                             for (index, component) in list.into_iter().enumerate() {
+//                                 parent
+//                                     .spawn(NodeBundle {
+//                                         style: Style {
+//                                             flex_direction: FlexDirection::Row,
+//                                             align_items: AlignItems::Center,
+//                                             ..default()
+//                                         },
+//                                         ..default()
+//                                     })
+//                                     .with_children(|parent| {
+//                                         // The button
+//                                         let mut entity = parent.spawn(ButtonBundle {
+//                                             style: Style {
+//                                                 size: Size::new(Val::Px(150.0), Val::Px(65.0)),
+//                                                 ..button_style.clone()
+//                                             },
+//                                             background_color: NORMAL_BUTTON.into(),
+//                                             ..default()
+//                                         });
+//                                         entity.insert(component.clone()).with_children(|parent| {
+//                                             parent.spawn(TextBundle::from_section(
+//                                                 format!("{component}"),
+//                                                 button_text_style.clone(),
+//                                             ));
+//                                         });
+//                                         if index == 0 {
+//                                             entity.insert(SelectedOption);
+//                                         }
+//                                         // let button_id = entity.id();
+
+//                                         parent
+//                                             .spawn(NodeBundle {
+//                                                 style: Style {
+//                                                     flex_direction: FlexDirection::Column,
+//                                                     align_items: AlignItems::Center,
+//                                                     ..default()
+//                                                 },
+//                                                 ..default()
+//                                             })
+//                                             .with_children(|parent| {
+//                                                 // The up arrow
+//                                                 let mut child_entity = parent.spawn((
+//                                                     ButtonBundle {
+//                                                         style: Style {
+//                                                             size: Size::new(
+//                                                                 Val::Px(20.0),
+//                                                                 Val::Px(20.0),
+//                                                             ),
+//                                                             ..button_style.clone()
+//                                                         },
+//                                                         background_color: NORMAL_BUTTON.into(),
+//                                                         ..default()
+//                                                     },
+//                                                     ButtonArrow {
+//                                                         direction: ButtonArrowDirection::Up,
+//                                                         related_setting: button_id,
+//                                                     },
+//                                                 ));
+//                                                 child_entity
+//                                                     // .insert(component.clone())
+//                                                     .with_children(|parent| {
+//                                                         parent.spawn(TextBundle::from_section(
+//                                                             "↑",
+//                                                             button_text_style.clone(),
+//                                                         ));
+//                                                     });
+
+//                                                 // The down arrow
+//                                                 let mut child_entity = parent.spawn((
+//                                                     ButtonBundle {
+//                                                         style: Style {
+//                                                             size: Size::new(
+//                                                                 Val::Px(20.0),
+//                                                                 Val::Px(20.0),
+//                                                             ),
+//                                                             ..button_style.clone()
+//                                                         },
+//                                                         background_color: NORMAL_BUTTON.into(),
+//                                                         ..default()
+//                                                     },
+//                                                     ButtonArrow {
+//                                                         direction: ButtonArrowDirection::Down,
+//                                                         related_setting: button_id,
+//                                                     },
+//                                                 ));
+//                                                 child_entity
+//                                                     // .insert(component.clone())
+//                                                     .with_children(|parent| {
+//                                                         parent.spawn(TextBundle::from_section(
+//                                                             "↓",
+//                                                             button_text_style.clone(),
+//                                                         ));
+//                                                     });
+//                                             });
+//                                     });
+//                             }
+//                         });
+//                 });
+//         });
+// }
+
+////////////////////////////////////////////////////////////////////////////////
+// MAIN
+////////////////////////////////////////////////////////////////////////////////
 #[allow(dead_code)]
 fn main() {
     println!("Not an example, just shared code between examples")
