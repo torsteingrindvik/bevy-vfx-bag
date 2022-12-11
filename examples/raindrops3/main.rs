@@ -93,9 +93,8 @@ fn startup(
     ));
 
     let make_list = || {
-        // Create a TextBundle that has a Text with a single section.
         TextBundle::from_sections(effects.0.iter().map(|&s| TextSection {
-            value: format!("{s}\n"),
+            value: format!(" {s} (on)\n"),
             style: TextStyle {
                 font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                 font_size: 30.0,
@@ -141,6 +140,7 @@ struct WindowRelation(WindowId);
 enum Change {
     Up,
     Down,
+    Select,
     Toggle,
 }
 
@@ -155,13 +155,14 @@ fn change_selection(
             for (entity, window_id) in query.iter_mut() {
                 if window_id.0 == window.id() {
                     if keyboard_input.just_pressed(KeyCode::Space) {
-                        commands.entity(entity).insert(Change::Toggle);
+                        commands.entity(entity).insert(Change::Select);
                     }
-
                     if keyboard_input.just_pressed(KeyCode::Up) {
                         commands.entity(entity).insert(Change::Up);
                     } else if keyboard_input.just_pressed(KeyCode::Down) {
                         commands.entity(entity).insert(Change::Down);
+                    } else if keyboard_input.just_pressed(KeyCode::T) {
+                        commands.entity(entity).insert(Change::Toggle);
                     }
                 }
             }
@@ -179,12 +180,15 @@ pub struct Selection {
 struct Effects([&'static str; 2]);
 
 #[allow(clippy::type_complexity)]
-fn update_order<C: Component>(
+fn update_order<W: Component>(
     mut commands: Commands,
     mut selection: Local<Selection>,
-    mut text: Query<(Entity, &mut Text, &Change), (With<C>, Added<Change>)>,
-    mut pixelate: Query<&mut VfxOrdering<PixelateSettings>, With<C>>,
-    mut raindrops: Query<&mut VfxOrdering<RaindropsSettings>, With<C>>,
+    mut text: Query<(Entity, &mut Text, &Change), (With<W>, Added<Change>)>,
+    mut pixelate: Query<&mut VfxOrdering<PixelateSettings>, With<W>>,
+    mut raindrops: Query<&mut VfxOrdering<RaindropsSettings>, With<W>>,
+
+    pixelate_settings: Query<(Entity, Option<&PixelateSettings>), (With<W>, With<Camera>)>,
+    raindrops_settings: Query<(Entity, Option<&RaindropsSettings>), (With<W>, With<Camera>)>,
 ) {
     let (entity, mut text, change) = match text.get_single_mut() {
         Ok(t) => t,
@@ -194,13 +198,15 @@ fn update_order<C: Component>(
     commands.entity(entity).remove::<Change>();
 
     let previous_index = selection.line_pointed_to;
+    let mut should_toggle = false;
 
     match change {
         Change::Up => selection.line_pointed_to = selection.line_pointed_to.saturating_sub(1),
         Change::Down => {
             selection.line_pointed_to = (selection.line_pointed_to + 1).min(text.sections.len() - 1)
         }
-        Change::Toggle => selection.is_selected = !selection.is_selected,
+        Change::Select => selection.is_selected = !selection.is_selected,
+        Change::Toggle => should_toggle = true,
     }
 
     if previous_index != selection.line_pointed_to && selection.is_selected {
@@ -211,29 +217,63 @@ fn update_order<C: Component>(
     let mut priority = 0.0;
 
     for (index, section) in text.sections.iter_mut().enumerate() {
-        let color = if selection.line_pointed_to == index && selection.is_selected {
-            Color::GOLD
-        } else if selection.line_pointed_to == index {
-            Color::BEIGE
+        section.value = if selection.line_pointed_to == index {
+            ">".to_string() + &section.value[1..]
         } else {
-            Color::WHITE
+            " ".to_string() + &section.value[1..]
         };
 
-        section.style.color = color;
+        let name = &section.value.as_str()[1..];
+        info!("Splitting {name}");
+        let name = name.rsplit_once(" (").unwrap().0;
 
-        match section.value.as_str().trim() {
+        match name {
             "Pixelate" => {
-                for mut order in pixelate.iter_mut() {
-                    order.priority = priority;
+                pixelate.single_mut().priority = priority;
+
+                if index == selection.line_pointed_to {
+                    for (entity, maybe_settings) in pixelate_settings.iter() {
+                        if should_toggle {
+                            if maybe_settings.is_some() {
+                                commands.entity(entity).remove::<PixelateSettings>();
+                                info!("Doing a replace of {} (after remove)", section.value);
+                                section.value = section.value.replace("(on)", "(off)");
+                            } else {
+                                commands.entity(entity).insert(PixelateSettings::default());
+                                info!("Doing a replace of {} (after insert)", section.value);
+                                section.value = section.value.replace("(off)", "(on)");
+                            }
+                        }
+                    }
                 }
             }
             "Raindrops" => {
-                for mut order in raindrops.iter_mut() {
-                    order.priority = priority;
+                raindrops.single_mut().priority = priority;
+
+                if index == selection.line_pointed_to {
+                    for (entity, maybe_settings) in raindrops_settings.iter() {
+                        if should_toggle {
+                            if maybe_settings.is_some() {
+                                commands.entity(entity).remove::<RaindropsSettings>();
+                                section.value = section.value.replace("(on)", "(off)");
+                            } else {
+                                commands.entity(entity).insert(RaindropsSettings::default());
+                                section.value = section.value.replace("(off)", "(on)");
+                            }
+                        }
+                    }
                 }
             }
-            _ => unreachable!(),
+            others => panic!("Name is {others}"),
         }
+
+        section.style.color = if selection.line_pointed_to == index && selection.is_selected {
+            Color::GOLD
+        } else if section.value.contains("(off)") {
+            Color::GRAY
+        } else {
+            Color::WHITE
+        };
 
         priority += 1.;
     }
