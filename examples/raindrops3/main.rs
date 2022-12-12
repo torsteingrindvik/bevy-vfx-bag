@@ -8,7 +8,8 @@ use bevy::{
 };
 
 use bevy_vfx_bag::post_processing2::v3::{
-    PixelateSettings, PostProcessingPlugin, RaindropsSettings, VfxOrdering,
+    FlipSettings, MaskSettings, PixelateSettings, PostProcessingPlugin, RaindropsSettings,
+    VfxOrdering,
 };
 
 fn main() {
@@ -17,7 +18,7 @@ fn main() {
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_plugin(PostProcessingPlugin {})
-        .insert_resource(Effects(["Pixelate", "Raindrops"]))
+        .insert_resource(Effects(["Pixelate", "Raindrops", "Flip", "Vignette"]))
         .add_startup_system(startup)
         .add_system(change_selection)
         .add_system(update_order::<Window1>)
@@ -54,8 +55,12 @@ fn startup(
         },
         PixelateSettings::default(),
         RaindropsSettings::default(),
+        FlipSettings::default(),
+        MaskSettings::default(),
         VfxOrdering::<RaindropsSettings>::new(0.0),
         VfxOrdering::<PixelateSettings>::new(0.0),
+        VfxOrdering::<FlipSettings>::new(0.0),
+        VfxOrdering::<MaskSettings>::new(0.0),
         Window1,
     ));
 
@@ -86,9 +91,13 @@ fn startup(
         },
         PixelateSettings::default(),
         RaindropsSettings::default(),
+        FlipSettings::default(),
+        MaskSettings::default(),
         // TODO: Insert defaults of these
         VfxOrdering::<RaindropsSettings>::new(0.0),
         VfxOrdering::<PixelateSettings>::new(0.0),
+        VfxOrdering::<FlipSettings>::new(0.0),
+        VfxOrdering::<MaskSettings>::new(0.0),
         Window2,
     ));
 
@@ -177,8 +186,9 @@ pub struct Selection {
 }
 
 #[derive(Resource)]
-struct Effects([&'static str; 2]);
+struct Effects([&'static str; 4]);
 
+#[allow(clippy::type_complexity)]
 fn insert_or_remove<W: Component, C: Component + Default>(
     commands: &mut Commands,
     index: usize,
@@ -192,11 +202,9 @@ fn insert_or_remove<W: Component, C: Component + Default>(
             if should_toggle {
                 if maybe_settings.is_some() {
                     commands.entity(entity).remove::<C>();
-                    info!("Doing a replace of {} (after remove)", section.value);
                     section.value = section.value.replace("(on)", "(off)");
                 } else {
                     commands.entity(entity).insert(C::default());
-                    info!("Doing a replace of {} (after insert)", section.value);
                     section.value = section.value.replace("(off)", "(on)");
                 }
             }
@@ -205,15 +213,20 @@ fn insert_or_remove<W: Component, C: Component + Default>(
 }
 
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn update_order<W: Component>(
     mut commands: Commands,
     mut selection: Local<Selection>,
     mut text: Query<(Entity, &mut Text, &Change), (With<W>, Added<Change>)>,
     mut pixelate: Query<&mut VfxOrdering<PixelateSettings>, With<W>>,
     mut raindrops: Query<&mut VfxOrdering<RaindropsSettings>, With<W>>,
+    mut flip: Query<&mut VfxOrdering<FlipSettings>, With<W>>,
+    mut mask: Query<&mut VfxOrdering<MaskSettings>, With<W>>,
 
     pixelate_settings: Query<(Entity, Option<&PixelateSettings>), (With<W>, With<Camera>)>,
     raindrops_settings: Query<(Entity, Option<&RaindropsSettings>), (With<W>, With<Camera>)>,
+    flip_settings: Query<(Entity, Option<&FlipSettings>), (With<W>, With<Camera>)>,
+    mask_settings: Query<(Entity, Option<&MaskSettings>), (With<W>, With<Camera>)>,
 ) {
     let (entity, mut text, change) = match text.get_single_mut() {
         Ok(t) => t,
@@ -249,7 +262,6 @@ fn update_order<W: Component>(
         };
 
         let name = &section.value.as_str()[1..];
-        info!("Splitting {name}");
         let name = name.rsplit_once(" (").unwrap().0;
 
         match name {
@@ -275,6 +287,30 @@ fn update_order<W: Component>(
                     should_toggle,
                     section,
                     &raindrops_settings,
+                );
+            }
+            "Flip" => {
+                flip.single_mut().priority = priority;
+
+                insert_or_remove(
+                    &mut commands,
+                    index,
+                    &selection,
+                    should_toggle,
+                    section,
+                    &flip_settings,
+                );
+            }
+            "Vignette" => {
+                mask.single_mut().priority = priority;
+
+                insert_or_remove(
+                    &mut commands,
+                    index,
+                    &selection,
+                    should_toggle,
+                    section,
+                    &mask_settings,
                 );
             }
             others => panic!("Name is {others}"),

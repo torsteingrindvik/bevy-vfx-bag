@@ -1,3 +1,4 @@
+use std::hash::Hash;
 use std::{marker::PhantomData, sync::Mutex};
 
 use bevy::{
@@ -22,7 +23,7 @@ use bevy::{
             BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
             BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
             FilterMode, FragmentState, LoadOp, MultisampleState, Operations, PipelineCache,
-            PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+            PrimitiveState, PrimitiveTopology, RenderPassColorAttachment, RenderPassDescriptor,
             RenderPipelineDescriptor, SamplerBindingType, SamplerDescriptor, ShaderDefVal,
             ShaderRef, ShaderStages, ShaderType, SpecializedRenderPipeline,
             SpecializedRenderPipelines, TextureSampleType, TextureViewDimension, TextureViewId,
@@ -32,7 +33,10 @@ use bevy::{
         view::{ExtractedView, ViewTarget},
         Extract, RenderApp, RenderStage,
     },
-    sprite::{Material2d, Material2dPipeline, Material2dPlugin, SetMaterial2dBindGroup},
+    sprite::{
+        Material2d, Material2dKey, Material2dPipeline, Material2dPlugin, Mesh2dPipeline,
+        Mesh2dPipelineKey, RenderMaterials2d, SetMaterial2dBindGroup,
+    },
     utils::{FloatOrd, HashMap},
 };
 
@@ -92,11 +96,12 @@ impl<const I: usize> EntityRenderCommand for SetTextureAndSampler<I> {
         // Here we fetch the bind group associated with the given texture.
         // This should have been prepared earlier in the render schedule.
         // See [`queue_post_processing_shared_bind_group`].
-        let bind_group = bind_groups
-            .into_inner()
-            .cached_texture_bind_groups
-            .get(&id)
-            .expect("Source texture view should be available");
+        let bind_group = {
+            match bind_groups.into_inner().cached_texture_bind_groups.get(&id) {
+                Some(bg) => bg,
+                None => panic!("Bind group for texture {id:?} should be available"),
+            }
+        };
 
         pass.set_bind_group(I, bind_group, &[]);
         RenderCommandResult::Success
@@ -152,22 +157,30 @@ impl FromWorld for PostProcessingNode {
 
 // TODO: Should we just create these directly when the user asks for it in the node run?
 // This way we don't have to have access to "main_texture_other"
+#[allow(clippy::type_complexity)]
 fn queue_post_processing_shared_bind_group(
     render_device: Res<RenderDevice>,
     globals: Res<GlobalsBuffer>,
     layout: Res<PostProcessingSharedLayout>,
     mut bind_groups: ResMut<PostProcessingBindGroups>,
 
-    views: Query<(Entity, &ViewTarget), AnyOf<(&RaindropsSettings, &PixelateSettings)>>,
+    views: Query<
+        (Entity, &ViewTarget),
+        AnyOf<(
+            &RaindropsSettings,
+            &PixelateSettings,
+            &FlipSettings,
+            &MaskSettings,
+        )>,
+    >,
 ) {
     for (_, view_target) in &views {
         for texture_view in [view_target.main_texture(), view_target.main_texture_other()] {
-            if !bind_groups
-                .cached_texture_bind_groups
-                .contains_key(&texture_view.id())
-            {
+            let id = &texture_view.id();
+            if !bind_groups.cached_texture_bind_groups.contains_key(id) {
+                info!("Inserting bind group for id: {id:?}");
                 bind_groups.cached_texture_bind_groups.insert(
-                    texture_view.id(),
+                    *id,
                     render_device.create_bind_group(&BindGroupDescriptor {
                         label: Some("PostProcessing texture bind group"),
                         layout: &layout.textures_layout,
@@ -324,19 +337,14 @@ where
     }
 }
 
-impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M> {
-    type Key = ();
+impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M>
+where
+    M::Data: PartialEq + Eq + Hash + Clone,
+{
+    type Key = Material2dKey<M>;
 
-    fn specialize(&self, _key: Self::Key) -> RenderPipelineDescriptor {
-        // let shader = match M::fragment_shader() {
-        //     ShaderRef::Handle(handle) => handle,
-        //     ShaderRef::Default => panic!("Default shader not supported for post processing"),
-        //     ShaderRef::Path(path) => {
-        //         panic!("Shader path not supported for post processing: {path:?}")
-        //     }
-        // };
-
-        RenderPipelineDescriptor {
+    fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
+        let mut descriptor = RenderPipelineDescriptor {
             label: Some("PostProcessing pipeline".into()),
             layout: Some(vec![
                 self.shared.textures_layout.clone(),
@@ -357,7 +365,18 @@ impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M> {
                     write_mask: ColorWrites::ALL,
                 })],
             }),
-        }
+        };
+
+        let fake_mesh = Mesh::new(PrimitiveTopology::PointList);
+
+        M::specialize(
+            &mut descriptor,
+            &fake_mesh.get_mesh_vertex_buffer_layout(),
+            key,
+        )
+        .expect("Specialize ok");
+
+        descriptor
     }
 }
 
@@ -474,6 +493,8 @@ impl<C> VfxOrdering<C> {
 #[allow(clippy::complexity)]
 pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
+    render_materials: Res<RenderMaterials2d<M>>,
+    // material2d_handles: Query<(Entity, &Handle<M>)>,
     pipeline: Res<PostProcessingLayout<M>>,
     mut pipelines: ResMut<SpecializedRenderPipelines<PostProcessingLayout<M>>>,
     mut pipeline_cache: ResMut<PipelineCache>,
@@ -483,29 +504,44 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
             &mut RenderPhase<PostProcessingPhaseItem>,
             // Option<&VfxOrdering>,
             &VfxOrdering<C>,
+            &Handle<M>,
         ),
         With<C>,
     >,
-) {
-    for (entity, mut phase, ordering) in views.iter_mut() {
+) where
+    M::Data: PartialEq + Eq + Hash + Clone,
+{
+    // if material2d_handles.is_empty() {
+    //     return;
+    // }
+
+    for (entity, mut phase, ordering, material_handle) in views.iter_mut() {
         debug!(
             "Adding post processing phase items: {:?}+{:?}",
             std::any::type_name::<M>(),
             std::any::type_name::<C>()
         );
+        if let Some(material2d) = render_materials.get(material_handle) {
+            let pipeline_id = pipelines.specialize(
+                &mut pipeline_cache,
+                &pipeline,
+                Material2dKey {
+                    mesh_key: Mesh2dPipelineKey::NONE,
+                    bind_group_data: material2d.key.clone(),
+                },
+            );
 
-        let pipeline_id = pipelines.specialize(&mut pipeline_cache, &pipeline, ());
+            let draw_function = draw_functions.read().id::<DrawPostProcessingItem<M>>();
+            // let draw_function = draw_functions.read().id::<DrawPostProcessingItem>();
+            debug!("Draw function found, adding phase item: {entity:?}");
 
-        let draw_function = draw_functions.read().id::<DrawPostProcessingItem<M>>();
-        // let draw_function = draw_functions.read().id::<DrawPostProcessingItem>();
-        debug!("Draw function found, adding phase item: {entity:?}");
-
-        phase.add(PostProcessingPhaseItem {
-            sort_key: FloatOrd(ordering.priority),
-            draw_function,
-            pipeline_id,
-            entity,
-        })
+            phase.add(PostProcessingPhaseItem {
+                sort_key: FloatOrd(ordering.priority),
+                draw_function,
+                pipeline_id,
+                entity,
+            })
+        }
     }
 }
 
@@ -522,10 +558,12 @@ impl Plugin for PostProcessingPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(Material2dPlugin::<Raindrops>::default())
             .add_plugin(Material2dPlugin::<Pixelate>::default())
+            .add_plugin(Material2dPlugin::<Flip>::default())
+            .add_plugin(Material2dPlugin::<Mask>::default())
             .add_plugin(ExtractComponentPlugin::<RaindropsSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<PixelateSettings>::default());
-
-        // let h = ImageTextureLoader;
+            .add_plugin(ExtractComponentPlugin::<PixelateSettings>::default())
+            .add_plugin(ExtractComponentPlugin::<FlipSettings>::default())
+            .add_plugin(ExtractComponentPlugin::<MaskSettings>::default());
 
         let handles = Handles {
             // raindrops_shader: load_shader!(app, RAINDROPS_SHADER_HANDLE, "shaders/raindrops.wgsl"),
@@ -543,7 +581,9 @@ impl Plugin for PostProcessingPlugin {
         app.insert_resource(handles)
             .add_system(fixup_assets)
             .add_system(raindrops_add_material)
-            .add_system(pixelate_add_material);
+            .add_system(pixelate_add_material)
+            .add_system(flip_add_material)
+            .add_system(masks_add_material);
 
         let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
         util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
@@ -554,10 +594,16 @@ impl Plugin for PostProcessingPlugin {
             .init_resource::<PostProcessingSharedLayout>()
             .init_resource::<PostProcessingLayout<Raindrops>>()
             .init_resource::<PostProcessingLayout<Pixelate>>()
+            .init_resource::<PostProcessingLayout<Flip>>()
+            .init_resource::<PostProcessingLayout<Mask>>()
             .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Raindrops>>>()
             .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Pixelate>>>()
+            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Flip>>>()
+            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Mask>>>()
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Pixelate>>()
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Flip>>()
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Mask>>()
             .add_system_to_stage(
                 RenderStage::Extract,
                 extract_post_processing_camera_phases::<RaindropsSettings>,
@@ -565,6 +611,14 @@ impl Plugin for PostProcessingPlugin {
             .add_system_to_stage(
                 RenderStage::Extract,
                 extract_post_processing_camera_phases::<PixelateSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Extract,
+                extract_post_processing_camera_phases::<FlipSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Extract,
+                extract_post_processing_camera_phases::<MaskSettings>,
             )
             .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
             .add_system_to_stage(
@@ -574,6 +628,14 @@ impl Plugin for PostProcessingPlugin {
             .add_system_to_stage(
                 RenderStage::Queue,
                 queue_post_processing_phase_items::<Pixelate, PixelateSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Queue,
+                queue_post_processing_phase_items::<Flip, FlipSettings>,
+            )
+            .add_system_to_stage(
+                RenderStage::Queue,
+                queue_post_processing_phase_items::<Mask, MaskSettings>,
             )
             .add_system_to_stage(
                 RenderStage::PhaseSort,
@@ -591,7 +653,12 @@ fn extract_post_processing_camera_phases<C: Component>(
     cameras: Extract<
         Query<
             (Entity, &Camera, Option<&VfxOrdering<C>>),
-            AnyOf<(&RaindropsSettings, &PixelateSettings)>,
+            AnyOf<(
+                &RaindropsSettings,
+                &PixelateSettings,
+                &FlipSettings,
+                &MaskSettings,
+            )>,
         >,
     >,
 ) {
@@ -789,7 +856,6 @@ pub struct Pixelate {
 impl Material2d for Pixelate {
     fn fragment_shader() -> ShaderRef {
         shader_ref!(PIXELATE_SHADER_HANDLE, "shaders/pixelate3.wgsl")
-        // "shaders/pixelate3.wgsl".into()
     }
 }
 
@@ -806,6 +872,265 @@ impl Default for PixelateSettings {
 }
 
 impl ExtractComponent for PixelateSettings {
+    type Query = &'static Self;
+    type Filter = ();
+    type Out = Self;
+
+    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        Some(*item)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// FLIP
+////////////////////////////////////////////////////////////////////////////////
+
+const FLIP_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
+
+#[allow(clippy::type_complexity)]
+fn flip_add_material(
+    mut commands: Commands,
+    mut assets: ResMut<Assets<Flip>>,
+    cameras: Query<(Entity, &FlipSettings), (With<Camera>, Without<Handle<Flip>>)>,
+) {
+    for (entity, settings) in cameras.iter() {
+        let material_handle = assets.add(Flip {
+            flip: FlipUniform::from(*settings),
+        });
+        commands.entity(entity).insert(material_handle);
+    }
+}
+
+#[derive(Debug, ShaderType, Clone)]
+struct FlipUniform {
+    x: f32,
+    y: f32,
+}
+
+impl From<FlipSettings> for FlipUniform {
+    fn from(flip: FlipSettings) -> Self {
+        let uv = match flip {
+            FlipSettings::None => [0.0, 0.0],
+            FlipSettings::Horizontal => [1.0, 0.0],
+            FlipSettings::Vertical => [0.0, 1.0],
+            FlipSettings::HorizontalVertical => [1.0, 1.0],
+        };
+
+        Self { x: uv[0], y: uv[1] }
+    }
+}
+
+/// TODO
+#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[uuid = "cbb6349e-7a00-11ed-8a99-63067e99f73e"]
+pub struct Flip {
+    #[uniform(0)]
+    flip: FlipUniform,
+}
+
+impl Material2d for Flip {
+    fn fragment_shader() -> ShaderRef {
+        shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip3.wgsl")
+    }
+}
+
+/// Which way to flip the texture.
+#[derive(Debug, Default, Copy, Clone, Component)]
+pub enum FlipSettings {
+    /// Don't flip.
+    None,
+
+    /// Flip horizontally.
+    #[default]
+    Horizontal,
+
+    /// Flip vertically.
+    Vertical,
+
+    /// Flip both axes.
+    HorizontalVertical,
+}
+
+impl ExtractComponent for FlipSettings {
+    type Query = &'static Self;
+    type Filter = ();
+    type Out = Self;
+
+    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        Some(*item)
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// MASKS
+////////////////////////////////////////////////////////////////////////////////
+
+const MASK_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
+
+#[allow(clippy::type_complexity)]
+fn masks_add_material(
+    mut commands: Commands,
+    mut assets: ResMut<Assets<Mask>>,
+    cameras: Query<(Entity, &MaskSettings), (With<Camera>, Without<Handle<Mask>>)>,
+) {
+    for (entity, settings) in cameras.iter() {
+        let material_handle = assets.add(Mask {
+            mask: MaskUniform::from(*settings),
+            variant: settings.variant,
+        });
+        commands.entity(entity).insert(material_handle);
+    }
+}
+
+#[derive(Debug, ShaderType, Clone)]
+struct MaskUniform {
+    strength: f32,
+}
+
+impl From<MaskSettings> for MaskUniform {
+    fn from(mask: MaskSettings) -> Self {
+        Self {
+            strength: mask.strength,
+        }
+    }
+}
+
+/// TODO
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct MaskKey(MaskVariant);
+
+impl From<&Mask> for MaskKey {
+    fn from(material: &Mask) -> Self {
+        Self(material.variant)
+    }
+}
+
+/// TODO
+#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[uuid = "1f0d1510-7a04-11ed-bf61-b3427e523ca2"]
+#[bind_group_data(MaskKey)]
+pub struct Mask {
+    #[uniform(0)]
+    mask: MaskUniform,
+
+    variant: MaskVariant,
+}
+
+impl Material2d for Mask {
+    fn fragment_shader() -> ShaderRef {
+        shader_ref!(MASK_SHADER_HANDLE, "shaders/masks3.wgsl")
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &bevy::render::mesh::MeshVertexBufferLayout,
+        key: bevy::sprite::Material2dKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        let def = match key.bind_group_data.0 {
+            MaskVariant::Square => "SQUARE",
+            MaskVariant::Crt => "CRT",
+            MaskVariant::Vignette => "VIGNETTE",
+        };
+        descriptor
+            .fragment
+            .as_mut()
+            .expect("Should have fragment state")
+            .shader_defs
+            .push(def.into());
+        info!("Specializing mask shader with {:?}", def);
+
+        Ok(())
+    }
+}
+
+/// This controls the parameters of the effect.
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+pub enum MaskVariant {
+    /// Rounded square type mask.
+    ///
+    /// One use of this mask is to post-process _other_ effects which might
+    /// have artifacts around the edges.
+    /// This mask can then attenuate that effect and thus remove the effects of the
+    /// artifacts.
+    ///
+    /// Strength value guidelines for use in [`Mask`]:
+    ///
+    /// Low end:    3.0 almost loses the square shape.
+    /// High end:   100.0 has almost sharp, thin edges.
+    Square,
+
+    /// Rounded square type mask, but more oval like a CRT television.
+    ///
+    /// This effect can be used as a part of a retry-style effect.
+    ///
+    /// Strength value guidelines for use in [`Mask`]:
+    ///
+    /// Low end:    3000.0 almost loses the CRT shape.
+    /// High end:   500000.0 "inflates" the effect a bit.
+    Crt,
+
+    /// Vignette mask.
+    ///
+    /// This effect can be used to replicate the classic photography
+    /// light attenuation seen at the edges of photos.
+    ///
+    /// Strength value guidelines for use in [`Mask`]:
+    ///
+    /// Low end:    0.10 gives a very subtle effect.
+    /// High end:   1.50 is almost a spotlight in the middle of the screen.
+    Vignette,
+}
+
+/// TODO
+#[derive(Debug, Copy, Clone, Component)]
+pub struct MaskSettings {
+    /// The strength parameter of the mask in use.
+    ///
+    /// See [`MaskVariant`] for guidelines on which range of values make sense
+    /// for the variant in use.
+    ///
+    /// Run the masks example to experiment with these values interactively.
+    pub strength: f32,
+
+    /// Which [`MaskVariant`] to produce.
+    pub variant: MaskVariant,
+}
+
+impl MaskSettings {
+    /// Create a new square mask with a reasonable strength value.
+    pub fn new_square() -> Self {
+        Self {
+            strength: 20.,
+            variant: MaskVariant::Square,
+        }
+    }
+
+    /// Create a new CRT mask with a reasonable strength value.
+    pub fn new_crt() -> Self {
+        Self {
+            strength: 80000.,
+            variant: MaskVariant::Crt,
+        }
+    }
+
+    /// Create a new vignette mask with a reasonable strength value.
+    pub fn new_vignette() -> Self {
+        Self {
+            strength: 0.66,
+            variant: MaskVariant::Vignette,
+        }
+    }
+}
+
+impl Default for MaskSettings {
+    fn default() -> Self {
+        Self::new_vignette()
+    }
+}
+
+impl ExtractComponent for MaskSettings {
     type Query = &'static Self;
     type Filter = ();
     type Out = Self;
