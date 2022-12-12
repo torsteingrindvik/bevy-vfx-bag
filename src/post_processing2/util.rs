@@ -583,3 +583,45 @@ macro_rules! load_image {
         }
     }};
 }
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! load_lut {
+    ($app: ident, $path_str: expr, $ext:literal) => {{
+        use bevy::render::texture::{CompressedImageFormats, ImageType};
+
+        let mut assets = $app.world.resource_mut::<Assets<_>>();
+
+        let mut image = Image::from_buffer(
+            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str)),
+            ImageType::Extension("png"), // todo
+            CompressedImageFormats::NONE,
+            // If `true` the output the mapping is very dark.
+            // If not, it's much closer to the original.
+            false,
+        )
+        .expect("Should be able to load image from buffer");
+
+        image.texture_descriptor.dimension = TextureDimension::D3;
+        image.texture_descriptor.size = Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 64,
+        };
+        image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+
+        image.texture_view_descriptor = Some(TextureViewDescriptor {
+            label: Some("LUT TextureViewDescriptor"),
+            format: Some(image.texture_descriptor.format),
+            dimension: Some(TextureViewDimension::D3),
+            ..default()
+        });
+
+        image.sampler_descriptor = ImageSampler::linear();
+
+        let handle = assets.add(image);
+
+        handle
+        // LutImage(handle)
+    }};
+}
