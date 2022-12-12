@@ -179,6 +179,31 @@ pub struct Selection {
 #[derive(Resource)]
 struct Effects([&'static str; 2]);
 
+fn insert_or_remove<W: Component, C: Component + Default>(
+    commands: &mut Commands,
+    index: usize,
+    selection: &Selection,
+    should_toggle: bool,
+    section: &mut TextSection,
+    maybe_settings: &Query<(Entity, Option<&C>), (With<W>, With<Camera>)>,
+) {
+    if index == selection.line_pointed_to {
+        for (entity, maybe_settings) in maybe_settings.iter() {
+            if should_toggle {
+                if maybe_settings.is_some() {
+                    commands.entity(entity).remove::<C>();
+                    info!("Doing a replace of {} (after remove)", section.value);
+                    section.value = section.value.replace("(on)", "(off)");
+                } else {
+                    commands.entity(entity).insert(C::default());
+                    info!("Doing a replace of {} (after insert)", section.value);
+                    section.value = section.value.replace("(off)", "(on)");
+                }
+            }
+        }
+    }
+}
+
 #[allow(clippy::type_complexity)]
 fn update_order<W: Component>(
     mut commands: Commands,
@@ -231,38 +256,26 @@ fn update_order<W: Component>(
             "Pixelate" => {
                 pixelate.single_mut().priority = priority;
 
-                if index == selection.line_pointed_to {
-                    for (entity, maybe_settings) in pixelate_settings.iter() {
-                        if should_toggle {
-                            if maybe_settings.is_some() {
-                                commands.entity(entity).remove::<PixelateSettings>();
-                                info!("Doing a replace of {} (after remove)", section.value);
-                                section.value = section.value.replace("(on)", "(off)");
-                            } else {
-                                commands.entity(entity).insert(PixelateSettings::default());
-                                info!("Doing a replace of {} (after insert)", section.value);
-                                section.value = section.value.replace("(off)", "(on)");
-                            }
-                        }
-                    }
-                }
+                insert_or_remove(
+                    &mut commands,
+                    index,
+                    &selection,
+                    should_toggle,
+                    section,
+                    &pixelate_settings,
+                );
             }
             "Raindrops" => {
                 raindrops.single_mut().priority = priority;
 
-                if index == selection.line_pointed_to {
-                    for (entity, maybe_settings) in raindrops_settings.iter() {
-                        if should_toggle {
-                            if maybe_settings.is_some() {
-                                commands.entity(entity).remove::<RaindropsSettings>();
-                                section.value = section.value.replace("(on)", "(off)");
-                            } else {
-                                commands.entity(entity).insert(RaindropsSettings::default());
-                                section.value = section.value.replace("(off)", "(on)");
-                            }
-                        }
-                    }
-                }
+                insert_or_remove(
+                    &mut commands,
+                    index,
+                    &selection,
+                    should_toggle,
+                    section,
+                    &raindrops_settings,
+                );
             }
             others => panic!("Name is {others}"),
         }
