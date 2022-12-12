@@ -65,10 +65,10 @@ fn startup(
         MaskSettings::default(),
         LutSettings::default(),
         VfxOrdering::<RaindropsSettings>::new(0.0),
-        VfxOrdering::<PixelateSettings>::new(0.0),
-        VfxOrdering::<FlipSettings>::new(0.0),
-        VfxOrdering::<MaskSettings>::new(0.0),
-        VfxOrdering::<LutSettings>::new(0.0),
+        VfxOrdering::<PixelateSettings>::new(1.0),
+        VfxOrdering::<FlipSettings>::new(2.0),
+        VfxOrdering::<MaskSettings>::new(3.0),
+        VfxOrdering::<LutSettings>::new(4.0),
         Window1,
     ));
 
@@ -104,10 +104,10 @@ fn startup(
         LutSettings::default(),
         // TODO: Insert defaults of these
         VfxOrdering::<RaindropsSettings>::new(0.0),
-        VfxOrdering::<PixelateSettings>::new(0.0),
-        VfxOrdering::<FlipSettings>::new(0.0),
-        VfxOrdering::<MaskSettings>::new(0.0),
-        VfxOrdering::<LutSettings>::new(0.0),
+        VfxOrdering::<PixelateSettings>::new(1.0),
+        VfxOrdering::<FlipSettings>::new(2.0),
+        VfxOrdering::<MaskSettings>::new(3.0),
+        VfxOrdering::<LutSettings>::new(4.0),
         Window2,
     ));
 

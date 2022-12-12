@@ -542,10 +542,12 @@ macro_rules! load_shader {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! load_image {
-    ($app: ident, $path_str: expr, $ext:literal) => {{
+    ($app: ident, $path_str: expr, $ext:literal, $srgb: expr) => {{
         if cfg!(feature = "dev") {
             let asset_server = $app.world.resource::<AssetServer>();
-            asset_server.load($path_str)
+            let handle = asset_server.load($path_str);
+            info!("Loading image: {}, handle: {:?}", $path_str, &handle);
+            handle
         } else {
             // use bevy::render::texture::ImageTextureLoader;
             use bevy::render::texture::{CompressedImageFormats, ImageType};
@@ -557,29 +559,10 @@ macro_rules! load_image {
                     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str)),
                     ImageType::Extension($ext),
                     CompressedImageFormats::NONE,
-                    true,
+                    $srgb,
                 )
                 .expect("image should load"),
             )
-            // $handle.typed()
-
-            // use bevy::render::texture::{CompressedImageFormats, ImageType};
-            // let mut image_assets = $app
-            //     .world
-            //     .get_resource_mut::<Assets<Image>>()
-            //     .expect("Should have Assets<Image>");
-
-            // let image_bytes =
-            //     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str));
-            // let image = Image::from_buffer(
-            //     image_bytes,
-            //     ImageType::Extension("tga"),
-            //     CompressedImageFormats::NONE,
-            //     true,
-            // )
-            // .expect("TGA should load properly");
-
-            // image_assets.add(image)
         }
     }};
 }
@@ -587,41 +570,53 @@ macro_rules! load_image {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! load_lut {
+    // ($app: ident, $path_str: expr, $ext:literal) => {{
+    //     use bevy::render::texture::{CompressedImageFormats, ImageType};
+
+    //     let handle = if cfg!(feature = "dev") {
+    //         let asset_server = $app.world.resource::<AssetServer>();
+    //         let handle = asset_server.load($path_str);
+    //         info!("Loading image: {}, handle: {:?}", $path_str, &handle);
+    //         handle
+    //     } else {
+    //         let mut assets = $app.world.resource_mut::<Assets<_>>();
+
+    //         let mut image = Image::from_buffer(
+    //             include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str)),
+    //             ImageType::Extension("png"), // todo
+    //             CompressedImageFormats::NONE,
+    //             // If `true` the output the mapping is very dark.
+    //             // If not, it's much closer to the original.
+    //             false,
+    //         )
+    //         .expect("Should be able to load image from buffer");
+
+    //         image.texture_descriptor.dimension = TextureDimension::D3;
+    //         image.texture_descriptor.size = Extent3d {
+    //             width: 64,
+    //             height: 64,
+    //             depth_or_array_layers: 64,
+    //         };
+    //         image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+
+    //         image.texture_view_descriptor = Some(TextureViewDescriptor {
+    //             label: Some("LUT TextureViewDescriptor"),
+    //             format: Some(image.texture_descriptor.format),
+    //             dimension: Some(TextureViewDimension::D3),
+    //             ..default()
+    //         });
+
+    //         image.sampler_descriptor = ImageSampler::linear();
+
+    //         let handle = assets.add(image);
+
+    //         handle
+    //     };
+
+    //     (handle, IsFixed(false))
+    // }};
     ($app: ident, $path_str: expr, $ext:literal) => {{
-        use bevy::render::texture::{CompressedImageFormats, ImageType};
-
-        let mut assets = $app.world.resource_mut::<Assets<_>>();
-
-        let mut image = Image::from_buffer(
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/", $path_str)),
-            ImageType::Extension("png"), // todo
-            CompressedImageFormats::NONE,
-            // If `true` the output the mapping is very dark.
-            // If not, it's much closer to the original.
-            false,
-        )
-        .expect("Should be able to load image from buffer");
-
-        image.texture_descriptor.dimension = TextureDimension::D3;
-        image.texture_descriptor.size = Extent3d {
-            width: 64,
-            height: 64,
-            depth_or_array_layers: 64,
-        };
-        image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
-
-        image.texture_view_descriptor = Some(TextureViewDescriptor {
-            label: Some("LUT TextureViewDescriptor"),
-            format: Some(image.texture_descriptor.format),
-            dimension: Some(TextureViewDimension::D3),
-            ..default()
-        });
-
-        image.sampler_descriptor = ImageSampler::linear();
-
-        let handle = assets.add(image);
-
-        handle
-        // LutImage(handle)
+        let handle = load_image!($app, $path_str, $ext, false);
+        (handle, IsFixed(false))
     }};
 }

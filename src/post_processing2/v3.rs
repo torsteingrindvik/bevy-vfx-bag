@@ -550,11 +550,15 @@ pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
 /// TODO
 pub struct PostProcessingPlugin {}
 
+#[derive(Debug, Default)]
+struct IsFixed(bool);
+
 #[derive(Default, Resource)]
 struct Handles {
     raindrops_texture: Handle<Image>,
-    fallback_lut: Handle<Image>,
-    // luts: HashMap<LutVariant, LutImage>,
+
+    // fallback_lut: (Handle<Image>, IsFixed),
+    luts: HashMap<LutVariant, (Handle<Image>, IsFixed)>,
 }
 
 impl Plugin for PostProcessingPlugin {
@@ -571,24 +575,25 @@ impl Plugin for PostProcessingPlugin {
             .add_plugin(ExtractComponentPlugin::<LutSettings>::default());
 
         let handles = Handles {
-            raindrops_texture: load_image!(app, "textures/raindrops.tga", "tga"),
-            fallback_lut: load_lut!(app, "luts/sauna.png", "png"),
-            // luts: HashMap::from_iter(vec![
-            // (LutVariant::Arctic, load_lut!(app, "luts/arctic.png", "png")),
-            // (
-            //     LutVariant::Burlesque,
-            //     load_lut!(app, "luts/burlesque.png", "png"),
-            // ),
-            // (LutVariant::Denim, load_lut!(app, "luts/denim.png", "png")),
-            // (LutVariant::Neo, load_lut!(app, "luts/neo.png", "png")),
-            // (
-            //     LutVariant::Neutral,
-            //     load_lut!(app, "luts/neutral.png", "png"),
-            // ),
-            // (LutVariant::Rouge, load_lut!(app, "luts/rouge.png", "png")),
-            // (LutVariant::Sauna, load_lut!(app, "luts/sauna.png", "png")),
-            // (LutVariant::Slate, load_lut!(app, "luts/slate.png", "png")),
-            // ]),
+            raindrops_texture: load_image!(app, "textures/raindrops.tga", "tga", true),
+            // fallback_lut: (load_image!(app, "luts/sauna.png", "png"), IsFixed(false)),
+            // fallback_lut: load_lut!(app, "luts/sauna.png", "png"),
+            luts: HashMap::from_iter(vec![
+                (LutVariant::Arctic, load_lut!(app, "luts/arctic.png", "png")),
+                (
+                    LutVariant::Burlesque,
+                    load_lut!(app, "luts/burlesque.png", "png"),
+                ),
+                (LutVariant::Denim, load_lut!(app, "luts/denim.png", "png")),
+                (LutVariant::Neo, load_lut!(app, "luts/neo.png", "png")),
+                (
+                    LutVariant::Neutral,
+                    load_lut!(app, "luts/neutral.png", "png"),
+                ),
+                (LutVariant::Rouge, load_lut!(app, "luts/rouge.png", "png")),
+                (LutVariant::Sauna, load_lut!(app, "luts/sauna.png", "png")),
+                (LutVariant::Slate, load_lut!(app, "luts/slate.png", "png")),
+            ]),
         };
 
         app.insert_resource(handles)
@@ -728,47 +733,63 @@ fn fixup_raindrops(
     }
 }
 
-// fn fixup_luts(handle: &Handle<Image>, assets: &mut Assets<Image>, materials: &mut Assets<Lut>) {
-//     info!("Handle was LUT texture");
+fn fixup_luts(
+    handle: &Handle<Image>,
+    handles: &mut Handles,
+    assets: &mut Assets<Image>,
+    materials: &mut Assets<Lut>,
+    variant: &LutVariant,
+) {
+    info!("Handle was LUT texture");
 
-//     let image = assets
-//         .get_mut(handle)
-//         .expect("Handle should point to asset");
+    let image = assets
+        .get_mut(handle)
+        .expect("Handle should point to asset");
 
-//     // The LUT is a 3d texture. It has 64 layers, each of which is a 64x64 image.
-//     image.texture_descriptor.size = Extent3d {
-//         width: 64,
-//         height: 64,
-//         depth_or_array_layers: 64,
-//     };
-//     image.texture_descriptor.dimension = TextureDimension::D3;
-//     image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+    // The LUT is a 3d texture. It has 64 layers, each of which is a 64x64 image.
+    image.texture_descriptor.size = Extent3d {
+        width: 64,
+        height: 64,
+        depth_or_array_layers: 64,
+    };
+    image.texture_descriptor.dimension = TextureDimension::D3;
+    image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
 
-//     image.texture_view_descriptor = Some(TextureViewDescriptor {
-//         label: Some("LUT TextureViewDescriptor"),
-//         format: Some(image.texture_descriptor.format),
-//         dimension: Some(TextureViewDimension::D3),
-//         ..default()
-//     });
+    image.texture_view_descriptor = Some(TextureViewDescriptor {
+        label: Some("LUT TextureViewDescriptor"),
+        format: Some(image.texture_descriptor.format),
+        dimension: Some(TextureViewDimension::D3),
+        ..default()
+    });
 
-//     // The default sampler may change depending on the image plugin setup,
-//     // so be explicit here.
-//     image.sampler_descriptor = ImageSampler::linear();
+    // The default sampler may change depending on the image plugin setup,
+    // so be explicit here.
+    image.sampler_descriptor = ImageSampler::linear();
 
-//     // dbg!(&image.sampler_descriptor);
-//     // dbg!(&image.texture_descriptor);
-//     // dbg!(&image.texture_view_descriptor);
+    // dbg!(&image.sampler_descriptor);
+    // dbg!(&image.texture_descriptor);
+    // dbg!(&image.texture_view_descriptor);
 
-//     for (_, _material) in materials.iter_mut() {
-//         // This mutable "access" is needed to trigger the usage of the new sampler.
-//         info!("Material is pointing to: {:?}", _material.lut);
-//     }
-// }
+    // handles.fallback_lut.1 = IsFixed(true);
+    // handles[]
+    handles
+        .luts
+        .get_mut(variant)
+        .expect("LUT variant should exist")
+        .1 = IsFixed(true);
+
+    for (_, _material) in materials.iter_mut() {
+        // TODO: I don't think we need this
+
+        // This mutable "access" is needed to trigger the usage of the new sampler.
+        info!("Material is pointing to: {:?}", _material.lut);
+    }
+}
 
 fn fixup_assets(
     mut ev_asset: EventReader<AssetEvent<Image>>,
     mut assets: ResMut<Assets<Image>>,
-    handles: Res<Handles>,
+    mut handles: ResMut<Handles>,
     mut raindrop_materials: ResMut<Assets<Raindrops>>,
     mut lut_materials: ResMut<Assets<Lut>>,
 ) {
@@ -778,14 +799,25 @@ fn fixup_assets(
 
             if *handle == handles.raindrops_texture {
                 fixup_raindrops(handle, &mut assets, &mut raindrop_materials);
+            // } else if *handle == handles.fallback_lut.0 {
+            //     fixup_luts(handle, &mut handles, &mut assets, &mut lut_materials);
+            } else if let Some((variant, (handle, _))) = handles
+                .luts
+                .iter()
+                .find(|(_, (lut_handle, _))| lut_handle == handle)
+            {
+                // To avoid borrowing issues, we need to clone the handle and variant.
+                let handle = handle.clone();
+                let variant = *variant;
+
+                fixup_luts(
+                    &handle,
+                    &mut handles,
+                    &mut assets,
+                    &mut lut_materials,
+                    &variant,
+                );
             }
-            // else if handles
-            //     .luts
-            //     .values()
-            //     .any(|lut_handle| lut_handle.0 == handle)
-            // {
-            //     fixup_luts(handle, &mut assets, &mut lut_materials);
-            // }
         }
     }
 }
@@ -1221,7 +1253,7 @@ const LUT_SHADER_HANDLE: HandleUntyped =
 fn lut_add_material(
     mut commands: Commands,
     mut assets: ResMut<Assets<Lut>>,
-    // asset_server: Res<AssetServer>,
+    asset_server: Res<AssetServer>,
     handles: Res<Handles>,
     cameras: Query<(Entity, &LutSettings), (With<Camera>, Without<Handle<Lut>>)>,
 ) {
@@ -1241,13 +1273,30 @@ fn lut_add_material(
     // }
 
     for (entity, settings) in cameras.iter() {
+        let (handle, is_fixed) = &handles
+            .luts
+            .get(&settings.variant)
+            .expect("Should not be able to provide invalid variant");
+
+        if !is_fixed.0 {
+            continue;
+        }
+
+        let state = asset_server.get_load_state(handle);
+
+        info!("LUT state: {:?}", state);
+
+        if !matches!(state, LoadState::Loaded) {
+            continue;
+        }
+
         let material_handle = assets.add(Lut {
             // lut: handles
             //     .luts
             //     .get(&settings.variant)
             //     .cloned()
             //     .expect("LUT handle should be valid"),
-            lut: handles.fallback_lut.clone(),
+            lut: handle.clone(),
             // lut: handles
 
             //     .luts
