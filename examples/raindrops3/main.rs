@@ -8,8 +8,8 @@ use bevy::{
 };
 
 use bevy_vfx_bag::post_processing2::v3::{
-    FlipSettings, LutSettings, MaskSettings, PixelateSettings, PostProcessingPlugin,
-    RaindropsSettings, VfxOrdering,
+    flip::FlipSettings, lut::LutSettings, masks::MaskSettings, pixelate::PixelateSettings,
+    raindrops::RaindropsSettings, PostProcessingPlugin, VfxOrdering,
 };
 
 fn main() {

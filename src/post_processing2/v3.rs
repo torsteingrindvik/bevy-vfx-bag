@@ -2,49 +2,38 @@ use std::hash::Hash;
 use std::{marker::PhantomData, sync::Mutex};
 
 use bevy::{
-    asset::LoadState,
     core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
-    ecs::{
-        query::QueryItem,
-        system::{lifetimeless::SRes, SystemParamItem},
-    },
+    ecs::system::{lifetimeless::SRes, SystemParamItem},
     prelude::*,
-    reflect::TypeUuid,
     render::{
-        extract_component::{ExtractComponent, ExtractComponentPlugin},
         globals::{GlobalsBuffer, GlobalsUniform},
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
-            sort_phase_system, AddRenderCommand, CachedRenderPipelinePhaseItem, DrawFunctionId,
-            DrawFunctions, EntityPhaseItem, EntityRenderCommand, PhaseItem, RenderCommandResult,
-            RenderPhase, SetItemPipeline, TrackedRenderPass,
+            sort_phase_system, CachedRenderPipelinePhaseItem, DrawFunctionId, DrawFunctions,
+            EntityPhaseItem, EntityRenderCommand, PhaseItem, RenderCommandResult, RenderPhase,
+            SetItemPipeline, TrackedRenderPass,
         },
         render_resource::{
-            AddressMode, AsBindGroup, BindGroup, BindGroupDescriptor, BindGroupEntry,
-            BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
-            BindingType, BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites,
-            Extent3d, FilterMode, FragmentState, LoadOp, MultisampleState, Operations,
-            PipelineCache, PrimitiveState, PrimitiveTopology, RenderPassColorAttachment,
-            RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, SamplerDescriptor,
-            ShaderDefVal, ShaderRef, ShaderStages, ShaderType, SpecializedRenderPipeline,
-            SpecializedRenderPipelines, TextureDimension, TextureFormat, TextureSampleType,
-            TextureViewDescriptor, TextureViewDimension, TextureViewId,
+            BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+            BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
+            BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites, FilterMode,
+            FragmentState, LoadOp, MultisampleState, Operations, PrimitiveState, PrimitiveTopology,
+            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+            SamplerBindingType, SamplerDescriptor, ShaderDefVal, ShaderStages, ShaderType,
+            SpecializedRenderPipeline, TextureSampleType, TextureViewDimension, TextureViewId,
         },
         renderer::{RenderContext, RenderDevice},
-        texture::{BevyDefault, ImageSampler},
+        texture::BevyDefault,
         view::{ExtractedView, ViewTarget},
-        Extract, RenderApp, RenderStage,
+        RenderApp, RenderStage,
     },
-    sprite::{
-        Material2d, Material2dKey, Material2dPipeline, Material2dPlugin, Mesh2dPipelineKey,
-        RenderMaterials2d, SetMaterial2dBindGroup,
-    },
+    sprite::{Material2d, Material2dKey, Material2dPipeline, SetMaterial2dBindGroup},
     utils::{FloatOrd, HashMap},
 };
 
-use crate::{load_image, load_lut, shader_ref};
-
 use super::util;
+
+mod post_processing_plugin;
 
 // The draw steps performed on a post processing phase item.
 type DrawPostProcessingItem<M> = (
@@ -169,10 +158,10 @@ fn queue_post_processing_shared_bind_group(
     views: Query<
         (Entity, &ViewTarget),
         AnyOf<(
-            &RaindropsSettings,
-            &PixelateSettings,
-            &FlipSettings,
-            &MaskSettings,
+            &raindrops::RaindropsSettings,
+            &pixelate::PixelateSettings,
+            &flip::FlipSettings,
+            &masks::MaskSettings,
         )>,
     >,
 ) {
@@ -358,7 +347,7 @@ where
             multisample: MultisampleState::default(),
             fragment: Some(FragmentState {
                 shader: self.fragment_shader.clone(),
-                // TODO: Get rid of this when Bevy supports it.
+                // TODO: Get rid of this when Bevy supports it: https://github.com/bevyengine/bevy/issues/6799
                 shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
                 entry_point: "fragment".into(),
                 targets: vec![Some(ColorTargetState {
@@ -491,334 +480,35 @@ impl<C> VfxOrdering<C> {
     }
 }
 
-/// Adds the phase items. Each time one is added it means that a render pass for the effect will be performed.
-#[allow(clippy::complexity)]
-pub fn queue_post_processing_phase_items<M: Material2d, C: Component>(
-    draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
-    render_materials: Res<RenderMaterials2d<M>>,
-    // material2d_handles: Query<(Entity, &Handle<M>)>,
-    pipeline: Res<PostProcessingLayout<M>>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<PostProcessingLayout<M>>>,
-    mut pipeline_cache: ResMut<PipelineCache>,
-    mut views: Query<
-        (
-            Entity,
-            &mut RenderPhase<PostProcessingPhaseItem>,
-            // Option<&VfxOrdering>,
-            &VfxOrdering<C>,
-            &Handle<M>,
-        ),
-        With<C>,
-    >,
-) where
-    M::Data: PartialEq + Eq + Hash + Clone,
-{
-    // if material2d_handles.is_empty() {
-    //     return;
-    // }
-
-    for (entity, mut phase, ordering, material_handle) in views.iter_mut() {
-        debug!(
-            "Adding post processing phase items: {:?}+{:?}",
-            std::any::type_name::<M>(),
-            std::any::type_name::<C>()
-        );
-        if let Some(material2d) = render_materials.get(material_handle) {
-            let pipeline_id = pipelines.specialize(
-                &mut pipeline_cache,
-                &pipeline,
-                Material2dKey {
-                    mesh_key: Mesh2dPipelineKey::NONE,
-                    bind_group_data: material2d.key.clone(),
-                },
-            );
-
-            let draw_function = draw_functions.read().id::<DrawPostProcessingItem<M>>();
-            // let draw_function = draw_functions.read().id::<DrawPostProcessingItem>();
-            debug!("Draw function found, adding phase item: {entity:?}");
-
-            phase.add(PostProcessingPhaseItem {
-                sort_key: FloatOrd(ordering.priority),
-                draw_function,
-                pipeline_id,
-                entity,
-            })
-        }
-    }
-}
-
 /// TODO
 pub struct PostProcessingPlugin {}
 
-#[derive(Debug, Default)]
-struct IsFixed(bool);
-
-#[derive(Default, Resource)]
-struct Handles {
-    raindrops_texture: Handle<Image>,
-
-    // fallback_lut: (Handle<Image>, IsFixed),
-    luts: HashMap<LutVariant, (Handle<Image>, IsFixed)>,
-}
-
 impl Plugin for PostProcessingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(Material2dPlugin::<Raindrops>::default())
-            .add_plugin(Material2dPlugin::<Pixelate>::default())
-            .add_plugin(Material2dPlugin::<Flip>::default())
-            .add_plugin(Material2dPlugin::<Mask>::default())
-            .add_plugin(Material2dPlugin::<Lut>::default())
-            .add_plugin(ExtractComponentPlugin::<RaindropsSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<PixelateSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<FlipSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<MaskSettings>::default())
-            .add_plugin(ExtractComponentPlugin::<LutSettings>::default());
-
-        let handles = Handles {
-            raindrops_texture: load_image!(app, "textures/raindrops.tga", "tga", true),
-            // fallback_lut: (load_image!(app, "luts/sauna.png", "png"), IsFixed(false)),
-            // fallback_lut: load_lut!(app, "luts/sauna.png", "png"),
-            luts: HashMap::from_iter(vec![
-                (LutVariant::Arctic, load_lut!(app, "luts/arctic.png", "png")),
-                (
-                    LutVariant::Burlesque,
-                    load_lut!(app, "luts/burlesque.png", "png"),
-                ),
-                (LutVariant::Denim, load_lut!(app, "luts/denim.png", "png")),
-                (LutVariant::Neo, load_lut!(app, "luts/neo.png", "png")),
-                (
-                    LutVariant::Neutral,
-                    load_lut!(app, "luts/neutral.png", "png"),
-                ),
-                (LutVariant::Rouge, load_lut!(app, "luts/rouge.png", "png")),
-                (LutVariant::Sauna, load_lut!(app, "luts/sauna.png", "png")),
-                (LutVariant::Slate, load_lut!(app, "luts/slate.png", "png")),
-            ]),
-        };
-
-        app.insert_resource(handles)
-            .add_system(fixup_assets)
-            .add_system(raindrops_add_material)
-            .add_system(pixelate_add_material)
-            .add_system(flip_add_material)
-            .add_system(masks_add_material)
-            .add_system(lut_add_material);
+        // app.add_system(pixelate::pixelate_add_material);
+        // .add_system(flip::flip_add_material);
+        // .add_system(masks::masks_add_material);
 
         let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
+
+        // All effects share this node.
         util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
 
         render_app
             .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
             .init_resource::<PostProcessingBindGroups>()
             .init_resource::<PostProcessingSharedLayout>()
-            .init_resource::<PostProcessingLayout<Raindrops>>()
-            .init_resource::<PostProcessingLayout<Pixelate>>()
-            .init_resource::<PostProcessingLayout<Flip>>()
-            .init_resource::<PostProcessingLayout<Mask>>()
-            .init_resource::<PostProcessingLayout<Lut>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Raindrops>>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Pixelate>>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Flip>>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Mask>>>()
-            .init_resource::<SpecializedRenderPipelines<PostProcessingLayout<Lut>>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Raindrops>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Pixelate>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Flip>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Mask>>()
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingItem<Lut>>()
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_post_processing_camera_phases::<RaindropsSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_post_processing_camera_phases::<PixelateSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_post_processing_camera_phases::<FlipSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_post_processing_camera_phases::<MaskSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_post_processing_camera_phases::<LutSettings>,
-            )
             .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Raindrops, RaindropsSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Pixelate, PixelateSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Flip, FlipSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Mask, MaskSettings>,
-            )
-            .add_system_to_stage(
-                RenderStage::Queue,
-                queue_post_processing_phase_items::<Lut, LutSettings>,
-            )
             .add_system_to_stage(
                 RenderStage::PhaseSort,
                 sort_phase_system::<PostProcessingPhaseItem>,
             );
-    }
-}
 
-// const RAINDROPS_SHADER_HANDLE: HandleUntyped =
-//     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 14785543643812289755);
-
-#[allow(clippy::type_complexity)]
-fn extract_post_processing_camera_phases<C: Component>(
-    mut commands: Commands,
-    cameras: Extract<
-        Query<
-            (Entity, &Camera, Option<&VfxOrdering<C>>),
-            AnyOf<(
-                &RaindropsSettings,
-                &PixelateSettings,
-                &FlipSettings,
-                &MaskSettings,
-                &LutSettings,
-            )>,
-        >,
-    >,
-) {
-    for (entity, camera, maybe_ordering) in &cameras {
-        if camera.is_active {
-            let ordering = if let Some(o) = maybe_ordering {
-                o.clone()
-            } else {
-                VfxOrdering::new(0.0)
-            };
-
-            commands
-                .get_or_spawn(entity)
-                .insert((RenderPhase::<PostProcessingPhaseItem>::default(), ordering));
-        }
-    }
-}
-
-fn fixup_raindrops(
-    handle: &Handle<Image>,
-    assets: &mut Assets<Image>,
-    materials: &mut Assets<Raindrops>,
-) {
-    info!("Handle was raindrops texture");
-
-    let image = assets
-        .get_mut(handle)
-        .expect("Handle should point to asset");
-
-    image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-        label: Some("Repeat Sampler"),
-        address_mode_u: AddressMode::Repeat,
-        address_mode_v: AddressMode::Repeat,
-        address_mode_w: AddressMode::Repeat,
-        ..default()
-    });
-
-    for (_, _material) in materials.iter_mut() {
-        // This mutable "access" is needed to trigger the usage of the new sampler.
-        info!("Material is pointing to: {:?}", _material.color_texture);
-    }
-}
-
-fn fixup_luts(
-    handle: &Handle<Image>,
-    handles: &mut Handles,
-    assets: &mut Assets<Image>,
-    materials: &mut Assets<Lut>,
-    variant: &LutVariant,
-) {
-    info!("Handle was LUT texture");
-
-    let image = assets
-        .get_mut(handle)
-        .expect("Handle should point to asset");
-
-    // The LUT is a 3d texture. It has 64 layers, each of which is a 64x64 image.
-    image.texture_descriptor.size = Extent3d {
-        width: 64,
-        height: 64,
-        depth_or_array_layers: 64,
-    };
-    image.texture_descriptor.dimension = TextureDimension::D3;
-    image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
-
-    image.texture_view_descriptor = Some(TextureViewDescriptor {
-        label: Some("LUT TextureViewDescriptor"),
-        format: Some(image.texture_descriptor.format),
-        dimension: Some(TextureViewDimension::D3),
-        ..default()
-    });
-
-    // The default sampler may change depending on the image plugin setup,
-    // so be explicit here.
-    image.sampler_descriptor = ImageSampler::linear();
-
-    // dbg!(&image.sampler_descriptor);
-    // dbg!(&image.texture_descriptor);
-    // dbg!(&image.texture_view_descriptor);
-
-    // handles.fallback_lut.1 = IsFixed(true);
-    // handles[]
-    handles
-        .luts
-        .get_mut(variant)
-        .expect("LUT variant should exist")
-        .1 = IsFixed(true);
-
-    for (_, _material) in materials.iter_mut() {
-        // TODO: I don't think we need this
-
-        // This mutable "access" is needed to trigger the usage of the new sampler.
-        info!("Material is pointing to: {:?}", _material.lut);
-    }
-}
-
-fn fixup_assets(
-    mut ev_asset: EventReader<AssetEvent<Image>>,
-    mut assets: ResMut<Assets<Image>>,
-    mut handles: ResMut<Handles>,
-    mut raindrop_materials: ResMut<Assets<Raindrops>>,
-    mut lut_materials: ResMut<Assets<Lut>>,
-) {
-    for ev in ev_asset.iter() {
-        if let AssetEvent::Created { handle } = ev {
-            info!("Handle to asset created: {:?}", handle);
-
-            if *handle == handles.raindrops_texture {
-                fixup_raindrops(handle, &mut assets, &mut raindrop_materials);
-            // } else if *handle == handles.fallback_lut.0 {
-            //     fixup_luts(handle, &mut handles, &mut assets, &mut lut_materials);
-            } else if let Some((variant, (handle, _))) = handles
-                .luts
-                .iter()
-                .find(|(_, (lut_handle, _))| lut_handle == handle)
-            {
-                // To avoid borrowing issues, we need to clone the handle and variant.
-                let handle = handle.clone();
-                let variant = *variant;
-
-                fixup_luts(
-                    &handle,
-                    &mut handles,
-                    &mut assets,
-                    &mut lut_materials,
-                    &variant,
-                );
-            }
-        }
+        app.add_plugin(raindrops::Plugin);
+        app.add_plugin(lut::Plugin);
+        app.add_plugin(masks::Plugin);
+        app.add_plugin(flip::Plugin);
+        app.add_plugin(pixelate::Plugin);
     }
 }
 
@@ -826,562 +516,33 @@ fn fixup_assets(
 // RAINDROPS
 ////////////////////////////////////////////////////////////////////////////////
 
-// #[cfg(not(feature = "dev"))]
-const RAINDROPS_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10304902298789658536);
-
-// #[cfg(not(feature = "dev"))]
-// const RAINDROPS_TEXTURE_HANDLE: HandleUntyped =
-//     HandleUntyped::weak_from_u64(Image::TYPE_UUID, 9363411587132811616);
-
-#[allow(clippy::type_complexity)]
-fn raindrops_add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Raindrops>>,
-    handles: Res<Handles>,
-    cameras: Query<(Entity, &RaindropsSettings), (With<Camera>, Without<Handle<Raindrops>>)>,
-) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Raindrops {
-            color_texture: handles.raindrops_texture.clone(),
-            raindrops: RaindropsUniform {
-                time_scaling: settings.time_scaling,
-                intensity: settings.intensity,
-                zoom: settings.zoom,
-            },
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-#[derive(Debug, ShaderType, Clone)]
-struct RaindropsUniform {
-    time_scaling: f32,
-    intensity: f32,
-    zoom: f32,
-}
-
-impl Default for RaindropsUniform {
-    fn default() -> Self {
-        Self {
-            time_scaling: 0.8,
-            intensity: 0.03,
-            zoom: 1.0,
-        }
-    }
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "4fba30ae-73e6-11ed-8575-9b008b9044f0"]
-pub struct Raindrops {
-    #[texture(0)]
-    #[sampler(1)]
-    color_texture: Handle<Image>,
-
-    #[uniform(2)]
-    raindrops: RaindropsUniform,
-}
-
-impl Material2d for Raindrops {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops3.wgsl")
-
-        // "shaders/raindrops3.wgsl".into()
-    }
-}
-
-/// TODO
-#[derive(Debug, Component, Clone, Copy)]
-pub struct RaindropsSettings {
-    time_scaling: f32,
-    intensity: f32,
-    zoom: f32,
-}
-
-impl Default for RaindropsSettings {
-    fn default() -> Self {
-        Self {
-            time_scaling: 0.8,
-            intensity: 0.03,
-            zoom: 1.0,
-        }
-    }
-}
-
-impl ExtractComponent for RaindropsSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
-    }
-}
+/// Raindrops
+pub mod raindrops;
 
 ////////////////////////////////////////////////////////////////////////////////
 // PIXELATE
 ////////////////////////////////////////////////////////////////////////////////
 
-const PIXELATE_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11093977931118718560);
-
-#[allow(clippy::type_complexity)]
-fn pixelate_add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Pixelate>>,
-    cameras: Query<(Entity, &PixelateSettings), (With<Camera>, Without<Handle<Pixelate>>)>,
-) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Pixelate {
-            pixelate: PixelateUniform {
-                block_size: settings.block_size,
-            },
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-#[derive(Debug, ShaderType, Clone)]
-struct PixelateUniform {
-    block_size: f32,
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "485141dc-7890-11ed-9cf4-ab2aa4ee03b0"]
-pub struct Pixelate {
-    #[uniform(0)]
-    pixelate: PixelateUniform,
-}
-
-impl Material2d for Pixelate {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(PIXELATE_SHADER_HANDLE, "shaders/pixelate3.wgsl")
-    }
-}
-
-/// TODO
-#[derive(Debug, Component, Clone, Copy)]
-pub struct PixelateSettings {
-    block_size: f32,
-}
-
-impl Default for PixelateSettings {
-    fn default() -> Self {
-        Self { block_size: 8.0 }
-    }
-}
-
-impl ExtractComponent for PixelateSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
-    }
-}
+/// Pixelate
+pub mod pixelate;
 
 ////////////////////////////////////////////////////////////////////////////////
 // FLIP
 ////////////////////////////////////////////////////////////////////////////////
 
-const FLIP_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
-
-#[allow(clippy::type_complexity)]
-fn flip_add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Flip>>,
-    cameras: Query<(Entity, &FlipSettings), (With<Camera>, Without<Handle<Flip>>)>,
-) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Flip {
-            flip: FlipUniform::from(*settings),
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-#[derive(Debug, ShaderType, Clone)]
-struct FlipUniform {
-    x: f32,
-    y: f32,
-}
-
-impl From<FlipSettings> for FlipUniform {
-    fn from(flip: FlipSettings) -> Self {
-        let uv = match flip {
-            FlipSettings::None => [0.0, 0.0],
-            FlipSettings::Horizontal => [1.0, 0.0],
-            FlipSettings::Vertical => [0.0, 1.0],
-            FlipSettings::HorizontalVertical => [1.0, 1.0],
-        };
-
-        Self { x: uv[0], y: uv[1] }
-    }
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "cbb6349e-7a00-11ed-8a99-63067e99f73e"]
-pub struct Flip {
-    #[uniform(0)]
-    flip: FlipUniform,
-}
-
-impl Material2d for Flip {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip3.wgsl")
-    }
-}
-
-/// Which way to flip the texture.
-#[derive(Debug, Default, Copy, Clone, Component)]
-pub enum FlipSettings {
-    /// Don't flip.
-    None,
-
-    /// Flip horizontally.
-    #[default]
-    Horizontal,
-
-    /// Flip vertically.
-    Vertical,
-
-    /// Flip both axes.
-    HorizontalVertical,
-}
-
-impl ExtractComponent for FlipSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
-    }
-}
+/// Flip
+pub mod flip;
 
 ////////////////////////////////////////////////////////////////////////////////
 // MASKS
 ////////////////////////////////////////////////////////////////////////////////
 
-const MASK_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
-
-#[allow(clippy::type_complexity)]
-fn masks_add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Mask>>,
-    cameras: Query<(Entity, &MaskSettings), (With<Camera>, Without<Handle<Mask>>)>,
-) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Mask {
-            mask: MaskUniform::from(*settings),
-            variant: settings.variant,
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-#[derive(Debug, ShaderType, Clone)]
-struct MaskUniform {
-    strength: f32,
-}
-
-impl From<MaskSettings> for MaskUniform {
-    fn from(mask: MaskSettings) -> Self {
-        Self {
-            strength: mask.strength,
-        }
-    }
-}
-
-/// TODO
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct MaskKey(MaskVariant);
-
-impl From<&Mask> for MaskKey {
-    fn from(material: &Mask) -> Self {
-        Self(material.variant)
-    }
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "1f0d1510-7a04-11ed-bf61-b3427e523ca2"]
-#[bind_group_data(MaskKey)]
-pub struct Mask {
-    #[uniform(0)]
-    mask: MaskUniform,
-
-    variant: MaskVariant,
-}
-
-impl Material2d for Mask {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(MASK_SHADER_HANDLE, "shaders/masks3.wgsl")
-    }
-
-    fn specialize(
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &bevy::render::mesh::MeshVertexBufferLayout,
-        key: bevy::sprite::Material2dKey<Self>,
-    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        let def = match key.bind_group_data.0 {
-            MaskVariant::Square => "SQUARE",
-            MaskVariant::Crt => "CRT",
-            MaskVariant::Vignette => "VIGNETTE",
-        };
-        descriptor
-            .fragment
-            .as_mut()
-            .expect("Should have fragment state")
-            .shader_defs
-            .push(def.into());
-        info!("Specializing mask shader with {:?}", def);
-
-        Ok(())
-    }
-}
-
-/// This controls the parameters of the effect.
-#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-pub enum MaskVariant {
-    /// Rounded square type mask.
-    ///
-    /// One use of this mask is to post-process _other_ effects which might
-    /// have artifacts around the edges.
-    /// This mask can then attenuate that effect and thus remove the effects of the
-    /// artifacts.
-    ///
-    /// Strength value guidelines for use in [`Mask`]:
-    ///
-    /// Low end:    3.0 almost loses the square shape.
-    /// High end:   100.0 has almost sharp, thin edges.
-    Square,
-
-    /// Rounded square type mask, but more oval like a CRT television.
-    ///
-    /// This effect can be used as a part of a retry-style effect.
-    ///
-    /// Strength value guidelines for use in [`Mask`]:
-    ///
-    /// Low end:    3000.0 almost loses the CRT shape.
-    /// High end:   500000.0 "inflates" the effect a bit.
-    Crt,
-
-    /// Vignette mask.
-    ///
-    /// This effect can be used to replicate the classic photography
-    /// light attenuation seen at the edges of photos.
-    ///
-    /// Strength value guidelines for use in [`Mask`]:
-    ///
-    /// Low end:    0.10 gives a very subtle effect.
-    /// High end:   1.50 is almost a spotlight in the middle of the screen.
-    Vignette,
-}
-
-/// TODO
-#[derive(Debug, Copy, Clone, Component)]
-pub struct MaskSettings {
-    /// The strength parameter of the mask in use.
-    ///
-    /// See [`MaskVariant`] for guidelines on which range of values make sense
-    /// for the variant in use.
-    ///
-    /// Run the masks example to experiment with these values interactively.
-    pub strength: f32,
-
-    /// Which [`MaskVariant`] to produce.
-    pub variant: MaskVariant,
-}
-
-impl MaskSettings {
-    /// Create a new square mask with a reasonable strength value.
-    pub fn new_square() -> Self {
-        Self {
-            strength: 20.,
-            variant: MaskVariant::Square,
-        }
-    }
-
-    /// Create a new CRT mask with a reasonable strength value.
-    pub fn new_crt() -> Self {
-        Self {
-            strength: 80000.,
-            variant: MaskVariant::Crt,
-        }
-    }
-
-    /// Create a new vignette mask with a reasonable strength value.
-    pub fn new_vignette() -> Self {
-        Self {
-            strength: 0.66,
-            variant: MaskVariant::Vignette,
-        }
-    }
-}
-
-impl Default for MaskSettings {
-    fn default() -> Self {
-        Self::new_vignette()
-    }
-}
-
-impl ExtractComponent for MaskSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
-    }
-}
+/// Masks
+pub mod masks;
 
 ////////////////////////////////////////////////////////////////////////////////
 // LUT
 ////////////////////////////////////////////////////////////////////////////////
 
-const LUT_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10304902298789658536);
-
-#[allow(clippy::type_complexity)]
-fn lut_add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Lut>>,
-    asset_server: Res<AssetServer>,
-    handles: Res<Handles>,
-    cameras: Query<(Entity, &LutSettings), (With<Camera>, Without<Handle<Lut>>)>,
-) {
-    // for (entity, settings) in cameras.iter() {
-    //     let lut_handle = handles
-    //         .luts
-    //         .get(&settings.variant)
-    //         .cloned()
-    //         .expect("LUT handle should be valid");
-    //     if matches!(asset_server.get_load_state(&lut_handle), LoadState::Loaded) {
-    //         info!("Loaded! Let's go: {lut_handle:?}, {settings:?}");
-    //         let material_handle = assets.add(Lut {
-    //             lut: LutImage(lut_handle),
-    //         });
-    //         commands.entity(entity).insert(material_handle);
-    //     }
-    // }
-
-    for (entity, settings) in cameras.iter() {
-        let (handle, is_fixed) = &handles
-            .luts
-            .get(&settings.variant)
-            .expect("Should not be able to provide invalid variant");
-
-        if !is_fixed.0 {
-            continue;
-        }
-
-        let state = asset_server.get_load_state(handle);
-
-        info!("LUT state: {:?}", state);
-
-        if !matches!(state, LoadState::Loaded) {
-            continue;
-        }
-
-        let material_handle = assets.add(Lut {
-            // lut: handles
-            //     .luts
-            //     .get(&settings.variant)
-            //     .cloned()
-            //     .expect("LUT handle should be valid"),
-            lut: handle.clone(),
-            // lut: handles
-
-            //     .luts
-            //     .get(&settings.variant)
-            //     .cloned()
-            //     .expect("LUT handle should be valid"),
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-// TODO
-// #[derive(Debug, Clone)]
-// pub struct LutImage(Handle<Image>);
-
-// impl<'a> From<&'a LutImage> for Option<&'a Handle<Image>> {
-//     fn from(lut: &'a LutImage) -> Self {
-//         // info!("Doing the thing from etc: {lut:?}, hopefully the image is ready now");
-//         Some(&lut.0)
-//         // None
-//     }
-// }
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "de05b53e-7a14-11ed-89c7-e315bbf02c20"]
-pub struct Lut {
-    #[texture(7, dimension = "3d")]
-    #[sampler(8)]
-    // lut: LutImage,
-    lut: Handle<Image>,
-}
-
-impl Material2d for Lut {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(LUT_SHADER_HANDLE, "shaders/lut3.wgsl")
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum LutVariant {
-    Arctic,
-    Burlesque,
-    Denim,
-    Neo,
-    Neutral,
-    Rouge,
-    Sauna,
-    Slate,
-}
-
-/// TODO
-#[derive(Debug, Clone, Component)]
-pub struct LutSettings {
-    variant: LutVariant,
-}
-
-impl Default for LutSettings {
-    fn default() -> Self {
-        Self::new_arctic()
-    }
-}
-
-impl LutSettings {
-    fn new_variant(variant: LutVariant) -> Self {
-        Self { variant }
-    }
-
-    /// TODO
-    pub fn new_arctic() -> Self {
-        Self::new_variant(LutVariant::Arctic)
-    }
-
-    /// TODO
-    pub fn new_neutral() -> Self {
-        Self::new_variant(LutVariant::Neutral)
-    }
-}
-
-impl ExtractComponent for LutSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(item.clone())
-    }
-}
+/// LUT todo
+pub mod lut;
