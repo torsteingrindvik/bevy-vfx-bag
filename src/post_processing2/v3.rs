@@ -158,10 +158,12 @@ fn queue_post_processing_shared_bind_group(
     views: Query<
         (Entity, &ViewTarget),
         AnyOf<(
-            &raindrops::RaindropsSettings,
-            &pixelate::PixelateSettings,
+            &blur::BlurSettings,
             &flip::FlipSettings,
+            &lut::LutSettings,
             &masks::MaskSettings,
+            &pixelate::PixelateSettings,
+            &raindrops::RaindropsSettings,
         )>,
     >,
 ) {
@@ -485,11 +487,9 @@ pub struct PostProcessingPlugin {}
 
 impl Plugin for PostProcessingPlugin {
     fn build(&self, app: &mut App) {
-        // app.add_system(pixelate::pixelate_add_material);
-        // .add_system(flip::flip_add_material);
-        // .add_system(masks::masks_add_material);
-
-        let render_app = app.get_sub_app_mut(RenderApp).expect("Should work");
+        let render_app = app
+            .get_sub_app_mut(RenderApp)
+            .expect("Need a render app for post processing");
 
         // All effects share this node.
         util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
@@ -504,45 +504,44 @@ impl Plugin for PostProcessingPlugin {
                 sort_phase_system::<PostProcessingPhaseItem>,
             );
 
-        app.add_plugin(raindrops::Plugin);
+        app.add_plugin(blur::Plugin);
+        app.add_plugin(chromatic_aberration::Plugin);
+        app.add_plugin(flip::Plugin);
         app.add_plugin(lut::Plugin);
         app.add_plugin(masks::Plugin);
-        app.add_plugin(flip::Plugin);
         app.add_plugin(pixelate::Plugin);
+        app.add_plugin(raindrops::Plugin);
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// RAINDROPS
-////////////////////////////////////////////////////////////////////////////////
+/// A trait all settings for post processing effects should implement.
+/// Allows sorting when effects are applied.
+pub trait HasPriority {
+    /// This effect's priority.
+    /// Lower valued effects are applied first.
+    fn priority(&self) -> f32;
+}
 
-/// Raindrops
-pub mod raindrops;
+/// Blur
+pub mod blur;
 
-////////////////////////////////////////////////////////////////////////////////
-// PIXELATE
-////////////////////////////////////////////////////////////////////////////////
-
-/// Pixelate
-pub mod pixelate;
-
-////////////////////////////////////////////////////////////////////////////////
-// FLIP
-////////////////////////////////////////////////////////////////////////////////
+/// Chromatic Aberration
+pub mod chromatic_aberration;
 
 /// Flip
 pub mod flip;
 
-////////////////////////////////////////////////////////////////////////////////
-// MASKS
-////////////////////////////////////////////////////////////////////////////////
+/// LUT todo
+pub mod lut;
 
 /// Masks
 pub mod masks;
 
-////////////////////////////////////////////////////////////////////////////////
-// LUT
-////////////////////////////////////////////////////////////////////////////////
+/// Pixelate
+pub mod pixelate;
 
-/// LUT todo
-pub mod lut;
+/// Raindrops
+pub mod raindrops;
+
+/// Wave
+pub mod wave;

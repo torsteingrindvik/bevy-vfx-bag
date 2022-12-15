@@ -19,9 +19,7 @@ impl bevy::prelude::Plugin for Plugin {
         app.insert_resource(texture)
             .add_system(fix_material)
             .add_system(add_material)
-            .add_plugin(
-                post_processing_plugin::Plugin::<Raindrops, RaindropsSettings>::default(),
-            );
+            .add_plugin(post_processing_plugin::Plugin::<Raindrops, RaindropsSettings>::default());
     }
 }
 
@@ -33,7 +31,7 @@ use crate::{load_image, shader_ref};
 use super::post_processing_plugin;
 
 pub(crate) const RAINDROPS_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10304902298789658536);
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3481202994982538867);
 
 fn fix_material(
     mut ev_asset: EventReader<AssetEvent<Image>>,

@@ -14,7 +14,7 @@ use crate::shader_ref;
 use super::post_processing_plugin;
 
 pub(crate) const MASK_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1059400090272595510);
 
 pub(crate) struct Plugin;
 
