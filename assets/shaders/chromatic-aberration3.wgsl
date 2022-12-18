@@ -31,5 +31,5 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         textureSample(t, ts, in.uv + (ca.dir_b * ca.magnitude_b)).b,
     );
 
-    return vec4<f32>(output, 1.0);
+    return vec4<f32>(out, 1.0);
 }

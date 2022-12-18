@@ -19,7 +19,7 @@ dev = []
 [dependencies]
 bevy = { path = "../bevy", default-features = false, features = [
     "bevy_asset",
-    "render",
+    "bevy_render",
     "png",
     "tga",
 ] }
