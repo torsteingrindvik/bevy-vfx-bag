@@ -1,24 +1,36 @@
 use std::{marker::PhantomData, sync::Mutex};
 
 use bevy::{
-    ecs::system::{lifetimeless::SRes, SystemParamItem},
+    core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
+    ecs::{
+        query::ROQueryItem,
+        system::{
+            lifetimeless::{Read, SRes},
+            SystemParamItem,
+        },
+    },
     prelude::*,
     render::{
         camera::ExtractedCamera,
+        extract_component::DynamicUniformIndex,
         globals::{GlobalsBuffer, GlobalsUniform},
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
             sort_phase_system, CachedRenderPipelinePhaseItem, DrawFunctionId, DrawFunctions,
-            PhaseItem, RenderCommand, RenderCommandResult, RenderPhase, TrackedRenderPass,
+            PhaseItem, RenderCommand, RenderCommandResult, RenderPhase, SetItemPipeline,
+            TrackedRenderPass,
         },
         render_resource::{
             BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
             BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-            BufferBindingType, CachedRenderPipelineId, FilterMode, Operations,
-            RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType, SamplerDescriptor,
-            ShaderStages, ShaderType, TextureSampleType, TextureViewDimension, TextureViewId,
+            BufferBindingType, CachedRenderPipelineId, FilterMode, FragmentState, MultisampleState,
+            Operations, PipelineCache, PrimitiveState, RenderPassColorAttachment,
+            RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, SamplerDescriptor,
+            ShaderDefVal, ShaderStages, ShaderType, TextureFormat, TextureSampleType,
+            TextureViewDimension, TextureViewId,
         },
         renderer::{RenderContext, RenderDevice},
+        texture::BevyDefault,
         view::{ExtractedView, ViewTarget},
         Extract, RenderApp, RenderStage,
     },
@@ -26,6 +38,99 @@ use bevy::{
 };
 
 use super::util;
+
+#[derive(Resource)]
+pub(crate) struct UniformBindGroup<U: ShaderType> {
+    pub inner: Option<BindGroup>,
+    marker: PhantomData<U>,
+}
+
+impl<U> Default for UniformBindGroup<U>
+where
+    U: ShaderType,
+{
+    fn default() -> Self {
+        Self {
+            inner: None,
+            marker: PhantomData,
+        }
+    }
+}
+
+/// TODO
+struct SetDynamicUniform<U: Component + ShaderType, const I: usize>(PhantomData<U>);
+impl<P: PhaseItem, U: Component + ShaderType, const I: usize> RenderCommand<P>
+    for SetDynamicUniform<U, I>
+{
+    type Param = SRes<UniformBindGroup<U>>;
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = Read<DynamicUniformIndex<U>>;
+
+    #[inline]
+    fn render<'w>(
+        _item: &P,
+        _view: (),
+        uniform_index: ROQueryItem<'w, Self::ItemWorldQuery>,
+        uniform_bind_group: SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        if let Some(bind_group) = uniform_bind_group.into_inner().inner.as_ref() {
+            pass.set_bind_group(I, bind_group, &[uniform_index.index()]);
+            RenderCommandResult::Success
+        } else {
+            RenderCommandResult::Failure
+        }
+    }
+}
+
+type DrawWithDynamicUniform<U> = (
+    // The pipeline must be set in order to use the correct bind group,
+    // access the correct shaders, and so on.
+    SetItemPipeline,
+    // Common to post processing items is that they all use the same
+    // first bind group, which has the input texture (the scene) and
+    // the sampler for that.
+    SetTextureSamplerGlobals<0>,
+    // TODO
+    SetDynamicUniform<U, 1>,
+    // Lastly we draw vertices.
+    // This is simple for a post processing effect, since we just draw
+    // a full screen triangle.
+    DrawPostProcessing,
+);
+
+pub(crate) fn create_layout_and_pipeline(
+    world: &mut World,
+    label: &str,
+    layout_entries: &[BindGroupLayoutEntry],
+    shader: Handle<Shader>,
+) -> (BindGroupLayout, CachedRenderPipelineId) {
+    let render_device = world.resource::<RenderDevice>();
+    let shared_layout = &world.resource::<PostProcessingSharedLayout>().shared_layout;
+
+    let uniform_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some(&format!("{label} Uniform Bind Group Layout")),
+        entries: layout_entries,
+    });
+
+    let pipeline_cache = world.resource::<PipelineCache>();
+    let pipeline_id = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
+        label: Some(format!("{label} Render Pipeline").into()),
+        layout: Some(vec![shared_layout.clone(), uniform_layout.clone()]),
+        vertex: fullscreen_shader_vertex_state(),
+        primitive: PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: MultisampleState::default(),
+        fragment: Some(FragmentState {
+            shader,
+            shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
+            entry_point: "fragment".into(),
+            targets: vec![Some(TextureFormat::bevy_default().into())],
+        }),
+    });
+
+    (uniform_layout, pipeline_id)
+}
 
 /// Bind groups.
 #[derive(Resource, Default)]
@@ -347,6 +452,12 @@ pub struct VfxOrdering<C> {
     /// Priority
     pub priority: f32,
     marker: PhantomData<C>,
+}
+
+impl<C> From<VfxOrdering<C>> for FloatOrd {
+    fn from(ordering: VfxOrdering<C>) -> Self {
+        Self(ordering.priority)
+    }
 }
 
 impl<C> Clone for VfxOrdering<C> {
