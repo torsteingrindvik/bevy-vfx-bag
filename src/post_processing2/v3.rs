@@ -1,114 +1,87 @@
-use std::hash::Hash;
 use std::{marker::PhantomData, sync::Mutex};
 
 use bevy::{
-    core_pipeline::fullscreen_vertex_shader::fullscreen_shader_vertex_state,
     ecs::system::{lifetimeless::SRes, SystemParamItem},
     prelude::*,
     render::{
+        camera::ExtractedCamera,
         globals::{GlobalsBuffer, GlobalsUniform},
         render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
         render_phase::{
             sort_phase_system, CachedRenderPipelinePhaseItem, DrawFunctionId, DrawFunctions,
-            EntityPhaseItem, EntityRenderCommand, PhaseItem, RenderCommandResult, RenderPhase,
-            SetItemPipeline, TrackedRenderPass,
+            PhaseItem, RenderCommand, RenderCommandResult, RenderPhase, TrackedRenderPass,
         },
         render_resource::{
             BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
             BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
-            BufferBindingType, CachedRenderPipelineId, ColorTargetState, ColorWrites, FilterMode,
-            FragmentState, LoadOp, MultisampleState, Operations, PrimitiveState, PrimitiveTopology,
-            RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-            SamplerBindingType, SamplerDescriptor, ShaderDefVal, ShaderStages, ShaderType,
-            SpecializedRenderPipeline, TextureSampleType, TextureViewDimension, TextureViewId,
+            BufferBindingType, CachedRenderPipelineId, FilterMode, Operations,
+            RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType, SamplerDescriptor,
+            ShaderStages, ShaderType, TextureSampleType, TextureViewDimension, TextureViewId,
         },
         renderer::{RenderContext, RenderDevice},
-        texture::BevyDefault,
         view::{ExtractedView, ViewTarget},
-        RenderApp, RenderStage,
+        Extract, RenderApp, RenderStage,
     },
-    sprite::{Material2d, Material2dKey, Material2dPipeline, SetMaterial2dBindGroup},
     utils::{FloatOrd, HashMap},
 };
 
 use super::util;
 
-mod post_processing_plugin;
-
-// The draw steps performed on a post processing phase item.
-type DrawPostProcessingItem<M> = (
-    // The pipeline must be set in order to use the correct bind group,
-    // access the correct shaders, and so on.
-    SetItemPipeline,
-    // Common to post processing items is that they all use the same
-    // first bind group, which has the input texture (the scene) and
-    // the sampler for that.
-    SetTextureAndSampler<0>,
-    // The second bind group is specific to the post processing item.
-    // It's typically used to pass in parameters to the shader.
-    //
-    // We don't have to define this bind group ourselves- the material derive
-    // does that for us.
-    // But we have to set it.
-    SetMaterial2dBindGroup<M, 1>,
-    // Lastly we draw vertices.
-    // This is simple for a post processing effect, since we just draw
-    // a full screen triangle.
-    DrawPostProcessing,
-);
-
 /// Bind groups.
 #[derive(Resource, Default)]
-pub struct PostProcessingBindGroups {
+pub struct PostProcessingSharedBindGroups {
     cached_texture_bind_groups: HashMap<TextureViewId, BindGroup>,
     current_source_texture: Mutex<Option<TextureViewId>>,
 }
 
-/// Render command which sets the shared bind group.
-pub struct SetTextureAndSampler<const I: usize>;
+/// Render command which sets the shared bind group containing the source texture and sampler as well as the globals.
+pub struct SetTextureSamplerGlobals<const I: usize>;
 
-impl<const I: usize> EntityRenderCommand for SetTextureAndSampler<I> {
-    type Param = SRes<PostProcessingBindGroups>;
+impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextureSamplerGlobals<I> {
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = ();
+    type Param = SRes<PostProcessingSharedBindGroups>;
+
     #[inline]
     fn render<'w>(
-        _view: Entity,
-        _item: Entity,
+        _item: &P,
+        _view: (),
+        _entity: (),
         bind_groups: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let id = {
             let lock = bind_groups
                 .current_source_texture
-                .lock()
+                .try_lock()
                 .expect("Mutex should be available");
             *lock.as_ref().expect("Source view id should be set")
         };
 
-        // Here we fetch the bind group associated with the given texture.
-        // This should have been prepared earlier in the render schedule.
-        // See [`queue_post_processing_shared_bind_group`].
-        let bind_group = {
-            match bind_groups.into_inner().cached_texture_bind_groups.get(&id) {
-                Some(bg) => bg,
-                None => panic!("Bind group for texture {id:?} should be available"),
-            }
-        };
-
-        pass.set_bind_group(I, bind_group, &[]);
-        RenderCommandResult::Success
+        if let Some(bind_group) = bind_groups.into_inner().cached_texture_bind_groups.get(&id) {
+            pass.set_bind_group(I, bind_group, &[]);
+            RenderCommandResult::Success
+        } else {
+            info!("SCAMPY");
+            RenderCommandResult::Failure
+        }
     }
 }
 
 /// Render command for drawing the full screen triangle.
 pub struct DrawPostProcessing;
 
-impl EntityRenderCommand for DrawPostProcessing {
+impl<P: PhaseItem> RenderCommand<P> for DrawPostProcessing {
     type Param = ();
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = ();
+
     #[inline]
     fn render<'w>(
-        _view: Entity,
-        _item: Entity,
-        _query: SystemParamItem<'w, '_, Self::Param>,
+        _item: &P,
+        _view: (),
+        _entity: (),
+        _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         // Draw the full screen triangle.
@@ -117,66 +90,27 @@ impl EntityRenderCommand for DrawPostProcessing {
     }
 }
 
-/// The post processing node.
-pub struct PostProcessingNode {
-    query: QueryState<
-        (
-            &'static RenderPhase<PostProcessingPhaseItem>,
-            &'static ViewTarget,
-        ),
-        With<ExtractedView>,
-    >,
-}
-
-impl PostProcessingNode {
-    /// The slot input name.
-    pub const IN_VIEW: &'static str = "view";
-
-    /// Createa a new post processing node.
-    pub fn new(world: &mut World) -> Self {
-        Self {
-            query: QueryState::new(world),
-        }
-    }
-}
-
-impl FromWorld for PostProcessingNode {
-    fn from_world(world: &mut World) -> Self {
-        Self::new(world)
-    }
-}
-
-// TODO: Should we just create these directly when the user asks for it in the node run?
-// This way we don't have to have access to "main_texture_other"
 #[allow(clippy::type_complexity)]
-fn queue_post_processing_shared_bind_group(
+fn queue_post_processing_shared_bind_groups(
     render_device: Res<RenderDevice>,
     globals: Res<GlobalsBuffer>,
     layout: Res<PostProcessingSharedLayout>,
-    mut bind_groups: ResMut<PostProcessingBindGroups>,
+    mut bind_groups: ResMut<PostProcessingSharedBindGroups>,
 
     views: Query<
         (Entity, &ViewTarget),
-        AnyOf<(
-            &blur::BlurSettings,
-            &flip::FlipSettings,
-            &lut::LutSettings,
-            &masks::MaskSettings,
-            &pixelate::PixelateSettings,
-            &raindrops::RaindropsSettings,
-        )>,
+        AnyOf<(&pixelate::PixelateSettings, &pixelate::PixelateUniform)>,
     >,
 ) {
     for (_, view_target) in &views {
         for texture_view in [view_target.main_texture(), view_target.main_texture_other()] {
             let id = &texture_view.id();
             if !bind_groups.cached_texture_bind_groups.contains_key(id) {
-                info!("Inserting bind group for id: {id:?}");
                 bind_groups.cached_texture_bind_groups.insert(
                     *id,
                     render_device.create_bind_group(&BindGroupDescriptor {
                         label: Some("PostProcessing texture bind group"),
-                        layout: &layout.textures_layout,
+                        layout: &layout.shared_layout,
                         entries: &[
                             BindGroupEntry {
                                 binding: 0,
@@ -220,13 +154,6 @@ pub struct PostProcessingPhaseItem {
     pipeline_id: CachedRenderPipelineId,
 }
 
-// Needed for this to be a render command.
-impl EntityPhaseItem for PostProcessingPhaseItem {
-    fn entity(&self) -> Entity {
-        self.entity
-    }
-}
-
 impl PhaseItem for PostProcessingPhaseItem {
     type SortKey = FloatOrd;
 
@@ -238,6 +165,10 @@ impl PhaseItem for PostProcessingPhaseItem {
     #[inline]
     fn draw_function(&self) -> DrawFunctionId {
         self.draw_function
+    }
+
+    fn entity(&self) -> Entity {
+        self.entity
     }
 }
 
@@ -251,7 +182,7 @@ impl CachedRenderPipelinePhaseItem for PostProcessingPhaseItem {
 /// This includes the texture and sampler bind group entries and the globals uniform.
 #[derive(Debug, Resource, Clone)]
 pub struct PostProcessingSharedLayout {
-    textures_layout: BindGroupLayout,
+    pub(crate) shared_layout: BindGroupLayout,
 }
 
 impl FromWorld for PostProcessingSharedLayout {
@@ -292,84 +223,58 @@ impl FromWorld for PostProcessingSharedLayout {
             ],
         });
 
-        Self { textures_layout }
-    }
-}
-
-/// This resource contains the post processing layout for a specific material.
-#[derive(Debug, Resource)]
-pub struct PostProcessingLayout<M: Material2d> {
-    shared: PostProcessingSharedLayout,
-    material_layout: BindGroupLayout,
-    fragment_shader: Handle<Shader>,
-    marker: PhantomData<M>,
-}
-
-impl<M> FromWorld for PostProcessingLayout<M>
-where
-    M: Material2d,
-{
-    fn from_world(world: &mut World) -> Self {
-        let shared = world
-            .get_resource::<PostProcessingSharedLayout>()
-            .expect("Shared layout should be available");
-        let material_pipeline = world
-            .get_resource::<Material2dPipeline<M>>()
-            .expect("Resource should be available");
-
         Self {
-            shared: shared.clone(),
-            material_layout: material_pipeline.material2d_layout.clone(),
-            fragment_shader: material_pipeline
-                .fragment_shader
-                .as_ref()
-                .expect("Should have fragment shader set")
-                .clone(),
-            marker: PhantomData,
+            shared_layout: textures_layout,
         }
     }
 }
 
-impl<M: Material2d> SpecializedRenderPipeline for PostProcessingLayout<M>
-where
-    M::Data: PartialEq + Eq + Hash + Clone,
-{
-    type Key = Material2dKey<M>;
+pub(crate) fn extract_post_processing_camera_phases<C: Component>(
+    mut commands: Commands,
+    cameras: Extract<Query<(Entity, &Camera, Option<&VfxOrdering<C>>), With<C>>>,
+) {
+    for (entity, camera, maybe_ordering) in &cameras {
+        if camera.is_active {
+            let ordering = if let Some(o) = maybe_ordering {
+                o.clone()
+            } else {
+                VfxOrdering::new(0.0)
+            };
 
-    fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
-        let mut descriptor = RenderPipelineDescriptor {
-            label: Some("PostProcessing pipeline".into()),
-            layout: Some(vec![
-                self.shared.textures_layout.clone(),
-                self.material_layout.clone(),
-            ]),
-            vertex: fullscreen_shader_vertex_state(),
-            primitive: PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: MultisampleState::default(),
-            fragment: Some(FragmentState {
-                shader: self.fragment_shader.clone(),
-                // TODO: Get rid of this when Bevy supports it: https://github.com/bevyengine/bevy/issues/6799
-                shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
-                entry_point: "fragment".into(),
-                targets: vec![Some(ColorTargetState {
-                    format: bevy::render::render_resource::TextureFormat::bevy_default(),
-                    blend: None,
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-        };
+            commands
+                .get_or_spawn(entity)
+                .insert((RenderPhase::<PostProcessingPhaseItem>::default(), ordering));
+        }
+    }
+}
 
-        let fake_mesh = Mesh::new(PrimitiveTopology::PointList);
+/// The post processing node.
+pub struct PostProcessingNode {
+    query: QueryState<
+        (
+            &'static ExtractedCamera,
+            &'static ViewTarget,
+            &'static RenderPhase<PostProcessingPhaseItem>,
+        ),
+        With<ExtractedView>,
+    >,
+}
 
-        M::specialize(
-            &mut descriptor,
-            &fake_mesh.get_mesh_vertex_buffer_layout(),
-            key,
-        )
-        .expect("Specialize ok");
+impl PostProcessingNode {
+    /// The slot input name.
+    pub const IN_VIEW: &'static str = "view";
 
-        descriptor
+    /// Create a a new post processing node.
+    pub fn new(world: &mut World) -> Self {
+        Self {
+            query: QueryState::new(world),
+        }
+    }
+}
+
+impl FromWorld for PostProcessingNode {
+    fn from_world(world: &mut World) -> Self {
+        Self::new(world)
     }
 }
 
@@ -388,66 +293,47 @@ impl Node for PostProcessingNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), NodeRunError> {
+        let shared_bind_groups = world.resource::<PostProcessingSharedBindGroups>();
         let view_entity = graph.get_input_entity(Self::IN_VIEW)?;
 
-        let bind_groups = world.resource::<PostProcessingBindGroups>();
-
-        let (phase, target) = match self.query.get_manual(world, view_entity) {
+        let (camera, view_target, phase) = match self.query.get_manual(world, view_entity) {
             Ok(result) => result,
             Err(_) => return Ok(()),
         };
 
-        // TODO: Handle HDR.
-
         let draw_functions = world.resource::<DrawFunctions<PostProcessingPhaseItem>>();
         let mut draw_functions = draw_functions.write();
+        draw_functions.prepare(world);
 
-        let mut has_cleared = false;
-
-        for item in &phase.items {
-            // for _ in 0..=1 {
-            let post_process = target.post_process_write();
+        for (_index, item) in phase.items.iter().enumerate() {
+            let post_process = view_target.post_process_write();
             let source = post_process.source;
             let destination = post_process.destination;
 
-            bind_groups
+            shared_bind_groups
                 .current_source_texture
                 .lock()
                 .expect("Mutex should be unused")
                 .replace(source.id());
 
-            let pass_descriptor = RenderPassDescriptor {
+            let mut render_pass = render_context.begin_tracked_render_pass(RenderPassDescriptor {
                 label: Some("PostProcessing pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: destination,
                     resolve_target: None,
-                    ops: if has_cleared {
-                        Operations {
-                            load: LoadOp::Load,
-                            store: true,
-                        }
-                    } else {
-                        has_cleared = true;
-                        Operations {
-                            load: LoadOp::Clear(Default::default()),
-                            store: true,
-                        }
-                    },
+                    ops: Operations::default(),
                 })],
                 depth_stencil_attachment: None,
-            };
+            });
 
-            let mut render_pass = TrackedRenderPass::new(
-                render_context
-                    .command_encoder
-                    .begin_render_pass(&pass_descriptor),
-            );
+            if let Some(viewport) = camera.viewport.as_ref() {
+                render_pass.set_camera_viewport(viewport);
+            }
 
-            let draw_function = draw_functions
+            draw_functions
                 .get_mut(item.draw_function)
-                .expect("Should get draw function");
-            draw_function.draw(world, &mut render_pass, view_entity, item);
-            // }
+                .expect("Draw function should exist")
+                .draw(world, &mut render_pass, view_entity, item);
         }
 
         Ok(())
@@ -485,6 +371,11 @@ impl<C> VfxOrdering<C> {
 /// TODO
 pub struct PostProcessingPlugin {}
 
+pub(crate) fn render_app(app: &mut App) -> &mut App {
+    app.get_sub_app_mut(RenderApp)
+        .expect("Need a render app for post processing")
+}
+
 impl Plugin for PostProcessingPlugin {
     fn build(&self, app: &mut App) {
         let render_app = app
@@ -496,52 +387,55 @@ impl Plugin for PostProcessingPlugin {
 
         render_app
             .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
-            .init_resource::<PostProcessingBindGroups>()
+            .init_resource::<PostProcessingSharedBindGroups>()
             .init_resource::<PostProcessingSharedLayout>()
-            .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_group)
+            .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_groups)
+            .add_system_to_stage(RenderStage::Extract, extract_camera_phases)
             .add_system_to_stage(
                 RenderStage::PhaseSort,
                 sort_phase_system::<PostProcessingPhaseItem>,
             );
 
-        app.add_plugin(blur::Plugin);
-        app.add_plugin(chromatic_aberration::Plugin);
-        app.add_plugin(flip::Plugin);
-        app.add_plugin(lut::Plugin);
-        app.add_plugin(masks::Plugin);
+        // app.add_plugin(blur::Plugin);
+        // app.add_plugin(chromatic_aberration::Plugin);
+        // app.add_plugin(flip::Plugin);
+        // app.add_plugin(lut::Plugin);
+        // app.add_plugin(masks::Plugin);
+        // app.add_plugin(raindrops::Plugin);
         app.add_plugin(pixelate::Plugin);
-        app.add_plugin(raindrops::Plugin);
     }
 }
 
-/// A trait all settings for post processing effects should implement.
-/// Allows sorting when effects are applied.
-pub trait HasPriority {
-    /// This effect's priority.
-    /// Lower valued effects are applied first.
-    fn priority(&self) -> f32;
+fn extract_camera_phases(mut commands: Commands, cameras: Extract<Query<(Entity, &Camera)>>) {
+    for (entity, camera) in &cameras {
+        if camera.is_active {
+            commands
+                .get_or_spawn(entity)
+                .insert(RenderPhase::<PostProcessingPhaseItem>::default());
+        }
+    }
 }
 
-/// Blur
-pub mod blur;
+// Blur
+// pub mod blur;
 
-/// Chromatic Aberration
-pub mod chromatic_aberration;
+// Chromatic Aberration
+// pub mod chromatic_aberration;
 
-/// Flip
-pub mod flip;
+// Flip
+// pub mod flip;
 
-/// LUT todo
-pub mod lut;
+// LUT todo
+// pub mod lut;
 
-/// Masks
-pub mod masks;
+// Masks
+// pub mod masks;
 
 /// Pixelate
 pub mod pixelate;
 
-/// Raindrops
-pub mod raindrops;
+// Raindrops
+// pub mod raindrops;
 
-/// Wave
-pub mod wave;
+// Wave
+// pub mod wave;

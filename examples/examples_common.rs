@@ -1,12 +1,13 @@
 use bevy::{
-    diagnostic::FrameTimeDiagnosticsPlugin, prelude::*, render::camera::Viewport, window::WindowId,
-};
-use bevy::{
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    diagnostic::FrameTimeDiagnosticsPlugin,
+    prelude::*,
+    render::{
+        camera::Viewport,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+    },
     window::WindowResized,
 };
 use core::f32::consts::PI;
-use std::marker::PhantomData;
 
 /// Adds some "sane defaults" for showing examples/development:
 ///
@@ -14,9 +15,6 @@ use std::marker::PhantomData;
 /// * Hot reloading
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
-
-// #[derive(Debug, Resource, Default)]
-// pub struct ExampleTexts(Vec<SwappableList>);
 
 #[derive(Debug, Clone)]
 pub struct ListItem {
@@ -30,8 +28,6 @@ pub struct List {
     is_selected: bool,
     line_pointed_to: usize,
     font: Handle<Font>,
-    // Maybe no need?
-    // marker: PhantomData<C>,
 }
 
 impl List {
@@ -151,17 +147,6 @@ impl List {
     }
 }
 
-// impl Default for ExampleText {
-//     fn default() -> Self {
-//         Self {
-//             lines: String::new(),
-//             is_selected:todo!(),
-//             line_pointed_to: todo!(),
-
-//         }
-//     }
-// }
-
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(
@@ -172,8 +157,6 @@ impl Plugin for SaneDefaultsPlugin {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
-        // .add_system(button_color_changer)
-        // .add_system(button_selector)
         .add_system(bevy::window::close_on_esc);
     }
 }
@@ -190,12 +173,6 @@ pub struct ShapesExamplePlugin {
 }
 
 impl ShapesExamplePlugin {
-    // pub fn with_3d_camera() -> Self {
-    //     Self {
-    //         add_3d_camera_bundle: true,
-    //     }
-    // }
-
     pub fn without_3d_camera() -> Self {
         Self {
             add_3d_camera_bundle: false,
@@ -396,7 +373,7 @@ mod ui {
                         color: Color::WHITE,
                     },
                 ) // Set the alignment of the Text
-                .with_text_alignment(TextAlignment::TOP_CENTER)
+                .with_text_alignment(TextAlignment::Center)
                 // Set the style of the TextBundle itself.
                 .with_style(Style {
                     align_self: AlignSelf::FlexEnd,
@@ -534,7 +511,7 @@ pub struct LeftCamera;
 pub struct RightCamera;
 
 fn set_camera_viewports(
-    windows: Res<Windows>,
+    windows: Query<&Window>,
     mut resize_events: EventReader<WindowResized>,
     mut left_camera: Query<&mut Camera, (With<LeftCamera>, Without<RightCamera>)>,
     mut right_camera: Query<&mut Camera, With<RightCamera>>,
@@ -543,28 +520,27 @@ fn set_camera_viewports(
     // so then each camera always takes up half the screen.
     // A resize_event is sent when the window is first created, allowing us to reuse this system for initial setup.
     for resize_event in resize_events.iter() {
-        if resize_event.id == WindowId::primary() {
-            let window = windows.primary();
-            let mut left_camera = match left_camera.get_single_mut() {
-                Ok(lc) => lc,
-                Err(_) => return,
-            };
-            left_camera.viewport = Some(Viewport {
-                physical_position: UVec2::new(0, 0),
-                physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
-                ..default()
-            });
+        let window = windows.get(resize_event.window).unwrap();
 
-            let mut right_camera = match right_camera.get_single_mut() {
-                Ok(rc) => rc,
-                Err(_) => return,
-            };
-            right_camera.viewport = Some(Viewport {
-                physical_position: UVec2::new(window.physical_width() / 2, 0),
-                physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
-                ..default()
-            });
-        }
+        let mut left_camera = match left_camera.get_single_mut() {
+            Ok(lc) => lc,
+            Err(_) => return,
+        };
+        left_camera.viewport = Some(Viewport {
+            physical_position: UVec2::new(0, 0),
+            physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
+            ..default()
+        });
+
+        let mut right_camera = match right_camera.get_single_mut() {
+            Ok(rc) => rc,
+            Err(_) => return,
+        };
+        right_camera.viewport = Some(Viewport {
+            physical_position: UVec2::new(window.physical_width() / 2, 0),
+            physical_size: UVec2::new(window.physical_width() / 2, window.physical_height()),
+            ..default()
+        });
     }
 }
 

@@ -135,7 +135,7 @@ fn add_material(
 
         let state = asset_server.get_load_state(handle);
 
-        info!("LUT state: {:?}", state);
+        debug!("LUT state: {:?}", state);
 
         if !matches!(state, LoadState::Loaded) {
             continue;

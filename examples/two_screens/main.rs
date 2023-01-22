@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::{
     prelude::*,
     render::camera::RenderTarget,
-    window::{CreateWindow, PresentMode, WindowId},
+    window::{WindowRef, WindowResolution},
 };
 
 use bevy_vfx_bag::post_processing2::v3::{
@@ -98,7 +98,7 @@ fn main() {
             "Blur",
             "ChromaticAberration",
         ]))
-        .add_startup_system(startup)
+        .add_startup_system(setup)
         .add_system(change_selection)
         .add_system(update_text)
         .add_system(update_effects::<Window1>)
@@ -122,12 +122,7 @@ struct Window1;
 #[derive(Component, Clone, Copy)]
 struct Window2;
 
-fn startup(
-    mut commands: Commands,
-    mut create_window_events: EventWriter<CreateWindow>,
-    asset_server: Res<AssetServer>,
-    effects: Res<Effects>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, effects: Res<Effects>) {
     let vfx_bundle = (
         PixelateSettings::default(),
         RaindropsSettings::default(),
@@ -148,19 +143,12 @@ fn startup(
         Window1,
     ));
 
-    let window_id = WindowId::new();
-
-    // sends out a "CreateWindow" event, which will be received by the windowing backend
-    create_window_events.send(CreateWindow {
-        id: window_id,
-        descriptor: WindowDescriptor {
-            width: 800.,
-            height: 600.,
-            present_mode: PresentMode::AutoNoVsync,
-            title: "Second window".to_string(),
+    let window_id = commands
+        .spawn(Window {
+            resolution: WindowResolution::new(0.4, 0.4),
             ..default()
-        },
-    });
+        })
+        .id();
 
     // second window camera
     commands.spawn((
@@ -168,7 +156,7 @@ fn startup(
             transform: Transform::from_xyz(-5.0, 12., 10.0)
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             camera: Camera {
-                target: RenderTarget::Window(window_id),
+                target: RenderTarget::Window(WindowRef::Entity(window_id)),
                 ..default()
             },
             ..default()
@@ -196,29 +184,27 @@ fn startup(
             );
             let tb = vfx.as_text_bundle();
 
-            parent.spawn(tb.clone()).insert((
-                vfx.clone(),
-                Window1,
-                WindowRelation(WindowId::primary()),
-            ));
+            parent
+                .spawn(tb.clone())
+                .insert((vfx.clone(), Window1, WindowRelation(window_id)));
             parent
                 .spawn(tb)
                 .insert((vfx, Window2, WindowRelation(window_id)));
         });
 }
 
-#[derive(Component)]
-struct WindowRelation(WindowId);
+#[derive(Component, Deref)]
+struct WindowRelation(Entity);
 
 fn change_selection(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<(&WindowRelation, &mut examples_common::List)>,
-    windows: Res<Windows>,
+    windows: Query<(Entity, &Window)>,
 ) {
-    for window in windows.iter() {
-        if window.is_focused() {
+    for (entity, window) in windows.iter() {
+        if window.focused {
             for (window_id, mut list) in query.iter_mut() {
-                if window_id.0 == window.id() {
+                if **window_id == entity {
                     if keyboard_input.just_pressed(KeyCode::Space) {
                         list.toggle_selected();
                     } else if keyboard_input.just_pressed(KeyCode::Up) {
