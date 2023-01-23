@@ -40,7 +40,7 @@ impl FromWorld for PixelateData {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(PixelateUniform::min_size()),
+                    min_binding_size: Some(PixelateSettings::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
@@ -71,7 +71,7 @@ impl bevy::prelude::Plugin for Plugin {
 
         // This puts the uniform into the render world.
         app.add_plugin(ExtractComponentPlugin::<PixelateSettings>::default())
-            .add_plugin(UniformComponentPlugin::<PixelateUniform>::default());
+            .add_plugin(UniformComponentPlugin::<PixelateSettings>::default());
 
         super::render_app(app)
             .add_system_to_stage(
@@ -79,10 +79,10 @@ impl bevy::prelude::Plugin for Plugin {
                 super::extract_post_processing_camera_phases::<PixelateSettings>,
             )
             .init_resource::<PixelateData>()
-            .init_resource::<UniformBindGroup<PixelateUniform>>()
+            .init_resource::<UniformBindGroup<PixelateSettings>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<PixelateUniform>>(
+            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<PixelateSettings>>(
             );
     }
 }
@@ -99,7 +99,7 @@ fn prepare(
     for (entity, mut phase, order) in views.iter_mut() {
         let draw_function = draw_functions
             .read()
-            .id::<DrawWithDynamicUniform<PixelateUniform>>();
+            .id::<DrawWithDynamicUniform<PixelateSettings>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -113,9 +113,9 @@ fn prepare(
 fn queue(
     render_device: Res<RenderDevice>,
     data: Res<PixelateData>,
-    mut bind_group: ResMut<UniformBindGroup<PixelateUniform>>,
-    uniforms: Res<ComponentUniforms<PixelateUniform>>,
-    views: Query<Entity, With<PixelateUniform>>,
+    mut bind_group: ResMut<UniformBindGroup<PixelateSettings>>,
+    uniforms: Res<ComponentUniforms<PixelateSettings>>,
+    views: Query<Entity, With<PixelateSettings>>,
 ) {
     bind_group.inner = None;
 
@@ -134,13 +134,7 @@ fn queue(
 }
 
 /// TODO
-#[derive(Debug, ShaderType, Clone, Component)]
-pub struct PixelateUniform {
-    pub(crate) block_size: f32,
-}
-
-/// TODO
-#[derive(Debug, Component, Clone, Copy)]
+#[derive(Debug, ShaderType, Component, Clone, Copy)]
 pub struct PixelateSettings {
     pub(crate) block_size: f32,
 }
@@ -154,15 +148,13 @@ impl Default for PixelateSettings {
 impl ExtractComponent for PixelateSettings {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
-    type Out = PixelateUniform;
+    type Out = Self;
 
     fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
         if !camera.is_active {
             return None;
         }
 
-        Some(PixelateUniform {
-            block_size: settings.block_size,
-        })
+        Some(*settings)
     }
 }

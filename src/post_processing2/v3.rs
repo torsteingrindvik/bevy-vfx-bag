@@ -39,6 +39,30 @@ use bevy::{
 
 use super::util;
 
+/// Blur
+pub mod blur;
+
+/// Chromatic Aberration
+pub mod chromatic_aberration;
+
+/// Flip
+pub mod flip;
+
+// LUT todo
+// pub mod lut;
+
+/// Masks
+pub mod masks;
+
+/// Pixelate
+pub mod pixelate;
+
+// Raindrops
+// pub mod raindrops;
+
+// Wave
+// pub mod wave;
+
 #[derive(Resource)]
 pub(crate) struct UniformBindGroup<U: ShaderType> {
     pub inner: Option<BindGroup>,
@@ -99,22 +123,31 @@ type DrawWithDynamicUniform<U> = (
     DrawPostProcessing,
 );
 
-pub(crate) fn create_layout_and_pipeline(
+pub(crate) fn create_layout(
     world: &mut World,
     label: &str,
     layout_entries: &[BindGroupLayoutEntry],
-    shader: Handle<Shader>,
-) -> (BindGroupLayout, CachedRenderPipelineId) {
+) -> BindGroupLayout {
     let render_device = world.resource::<RenderDevice>();
-    let shared_layout = &world.resource::<PostProcessingSharedLayout>().shared_layout;
 
-    let uniform_layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+    render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some(&format!("{label} Uniform Bind Group Layout")),
         entries: layout_entries,
-    });
+    })
+}
 
-    let pipeline_cache = world.resource::<PipelineCache>();
-    let pipeline_id = pipeline_cache.queue_render_pipeline(RenderPipelineDescriptor {
+pub(crate) fn render_pipeline_descriptor(
+    label: &str,
+    shared_layout: &BindGroupLayout,
+    uniform_layout: &BindGroupLayout,
+    shader: Handle<Shader>,
+    shader_definitions: Vec<ShaderDefVal>,
+) -> RenderPipelineDescriptor {
+    let mut shader_defs = vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)];
+
+    shader_defs.extend(shader_definitions);
+
+    RenderPipelineDescriptor {
         label: Some(format!("{label} Render Pipeline").into()),
         layout: Some(vec![shared_layout.clone(), uniform_layout.clone()]),
         vertex: fullscreen_shader_vertex_state(),
@@ -123,17 +156,47 @@ pub(crate) fn create_layout_and_pipeline(
         multisample: MultisampleState::default(),
         fragment: Some(FragmentState {
             shader,
-            shader_defs: vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)],
+            shader_defs,
             entry_point: "fragment".into(),
             targets: vec![Some(TextureFormat::bevy_default().into())],
         }),
-    });
+    }
+}
+
+pub(crate) fn create_pipeline(
+    world: &mut World,
+    label: &str,
+    uniform_layout: &BindGroupLayout,
+    shader: Handle<Shader>,
+    shader_definitions: Vec<ShaderDefVal>,
+) -> CachedRenderPipelineId {
+    let shared_layout = &world.resource::<PostProcessingSharedLayout>().shared_layout;
+
+    let pipeline_cache = world.resource::<PipelineCache>();
+
+    pipeline_cache.queue_render_pipeline(render_pipeline_descriptor(
+        label,
+        shared_layout,
+        uniform_layout,
+        shader,
+        shader_definitions,
+    ))
+}
+
+pub(crate) fn create_layout_and_pipeline(
+    world: &mut World,
+    label: &str,
+    layout_entries: &[BindGroupLayoutEntry],
+    shader: Handle<Shader>,
+) -> (BindGroupLayout, CachedRenderPipelineId) {
+    let uniform_layout = create_layout(world, label, layout_entries);
+    let pipeline_id = create_pipeline(world, label, &uniform_layout, shader, vec![]);
 
     (uniform_layout, pipeline_id)
 }
 
 /// Bind groups.
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Debug)]
 pub struct PostProcessingSharedBindGroups {
     cached_texture_bind_groups: HashMap<TextureViewId, BindGroup>,
     current_source_texture: Mutex<Option<TextureViewId>>,
@@ -163,11 +226,13 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextureSamplerGlobals
             *lock.as_ref().expect("Source view id should be set")
         };
 
-        if let Some(bind_group) = bind_groups.into_inner().cached_texture_bind_groups.get(&id) {
+        let bind_groups = bind_groups.into_inner();
+
+        if let Some(bind_group) = bind_groups.cached_texture_bind_groups.get(&id) {
             pass.set_bind_group(I, bind_group, &[]);
             RenderCommandResult::Success
         } else {
-            info!("SCAMPY");
+            info!("No bind group for texture view id: {id:?} on {bind_groups:?}");
             RenderCommandResult::Failure
         }
     }
@@ -195,6 +260,9 @@ impl<P: PhaseItem> RenderCommand<P> for DrawPostProcessing {
     }
 }
 
+#[derive(Debug, Component)]
+struct PostProcessingCamera;
+
 #[allow(clippy::type_complexity)]
 fn queue_post_processing_shared_bind_groups(
     render_device: Res<RenderDevice>,
@@ -202,10 +270,7 @@ fn queue_post_processing_shared_bind_groups(
     layout: Res<PostProcessingSharedLayout>,
     mut bind_groups: ResMut<PostProcessingSharedBindGroups>,
 
-    views: Query<
-        (Entity, &ViewTarget),
-        AnyOf<(&pixelate::PixelateSettings, &pixelate::PixelateUniform)>,
-    >,
+    views: Query<(Entity, &ViewTarget), With<PostProcessingCamera>>,
 ) {
     for (_, view_target) in &views {
         for texture_view in [view_target.main_texture(), view_target.main_texture_other()] {
@@ -334,6 +399,13 @@ impl FromWorld for PostProcessingSharedLayout {
     }
 }
 
+/// This system will add a default post processing phase to all active cameras, given that this camera
+/// has the given component `C` in the render world.
+///
+/// A `VfxOrdering<C>` component can be added to the camera to control the ordering of the effect.
+/// Else a default is inserted.
+///
+/// A `PostProcessingCamera` component is added in order to identify cameras that have any effect applied.
 pub(crate) fn extract_post_processing_camera_phases<C: Component>(
     mut commands: Commands,
     cameras: Extract<Query<(Entity, &Camera, Option<&VfxOrdering<C>>), With<C>>>,
@@ -346,9 +418,11 @@ pub(crate) fn extract_post_processing_camera_phases<C: Component>(
                 VfxOrdering::new(0.0)
             };
 
-            commands
-                .get_or_spawn(entity)
-                .insert((RenderPhase::<PostProcessingPhaseItem>::default(), ordering));
+            commands.get_or_spawn(entity).insert((
+                RenderPhase::<PostProcessingPhaseItem>::default(),
+                ordering,
+                PostProcessingCamera,
+            ));
         }
     }
 }
@@ -446,7 +520,7 @@ impl Node for PostProcessingNode {
 }
 
 /// Decide on ordering for post processing effects.
-/// TODO: Describe if higher values or lower values means first.
+/// Lower numbers means run earlier.
 #[derive(Debug, Component, Copy)]
 pub struct VfxOrdering<C> {
     /// Priority
@@ -470,7 +544,7 @@ impl<C> Clone for VfxOrdering<C> {
 }
 
 impl<C> VfxOrdering<C> {
-    /// Create a new ordering. TODO
+    /// Create a new ordering.
     pub fn new(priority: f32) -> Self {
         Self {
             priority,
@@ -507,13 +581,14 @@ impl Plugin for PostProcessingPlugin {
                 sort_phase_system::<PostProcessingPhaseItem>,
             );
 
-        // app.add_plugin(blur::Plugin);
-        // app.add_plugin(chromatic_aberration::Plugin);
-        // app.add_plugin(flip::Plugin);
+        app.add_plugin(blur::Plugin);
+        app.add_plugin(chromatic_aberration::Plugin);
+        app.add_plugin(flip::Plugin);
         // app.add_plugin(lut::Plugin);
-        // app.add_plugin(masks::Plugin);
+        app.add_plugin(masks::Plugin);
         // app.add_plugin(raindrops::Plugin);
         app.add_plugin(pixelate::Plugin);
+        // app.add_plugin(wave::Plugin);
     }
 }
 
@@ -526,27 +601,3 @@ fn extract_camera_phases(mut commands: Commands, cameras: Extract<Query<(Entity,
         }
     }
 }
-
-// Blur
-// pub mod blur;
-
-// Chromatic Aberration
-// pub mod chromatic_aberration;
-
-// Flip
-// pub mod flip;
-
-// LUT todo
-// pub mod lut;
-
-// Masks
-// pub mod masks;
-
-/// Pixelate
-pub mod pixelate;
-
-// Raindrops
-// pub mod raindrops;
-
-// Wave
-// pub mod wave;

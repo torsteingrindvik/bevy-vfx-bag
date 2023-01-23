@@ -1,46 +1,136 @@
-use crate::shader_ref;
-
 use bevy::{
+    asset::load_internal_asset,
     ecs::query::QueryItem,
     prelude::*,
     reflect::TypeUuid,
     render::{
-        extract_component::ExtractComponent,
-        render_resource::{AsBindGroup, ShaderRef, ShaderType},
+        extract_component::{
+            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+        },
+        render_phase::{AddRenderCommand, DrawFunctions, RenderPhase},
+        render_resource::{
+            BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
+            BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
+        },
+        renderer::RenderDevice,
+        RenderStage,
     },
-    sprite::Material2d,
 };
 
-use super::post_processing_plugin;
+use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+
+use super::{PostProcessingPhaseItem, VfxOrdering};
 
 pub(crate) const FLIP_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
 
-pub(crate) struct Plugin;
+#[derive(Resource)]
+pub(crate) struct FlipData {
+    pub pipeline_id: CachedRenderPipelineId,
+    pub uniform_layout: BindGroupLayout,
+}
 
+impl FromWorld for FlipData {
+    fn from_world(world: &mut World) -> Self {
+        let (uniform_layout, pipeline_id) = super::create_layout_and_pipeline(
+            world,
+            "Flip",
+            &[BindGroupLayoutEntry {
+                binding: 0,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: Some(FlipUniform::min_size()),
+                },
+                visibility: ShaderStages::FRAGMENT,
+                count: None,
+            }],
+            FLIP_SHADER_HANDLE.typed(),
+        );
+
+        FlipData {
+            pipeline_id,
+            uniform_layout,
+        }
+    }
+}
+
+pub(crate) struct Plugin;
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_system(add_material)
-            .add_plugin(post_processing_plugin::Plugin::<Flip, FlipSettings>::default());
+        load_internal_asset!(
+            app,
+            FLIP_SHADER_HANDLE,
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "flip3.wgsl"),
+            Shader::from_wgsl
+        );
+
+        // This puts the uniform into the render world.
+        app.add_plugin(ExtractComponentPlugin::<FlipSettings>::default())
+            .add_plugin(UniformComponentPlugin::<FlipUniform>::default());
+
+        super::render_app(app)
+            .add_system_to_stage(
+                RenderStage::Extract,
+                super::extract_post_processing_camera_phases::<FlipSettings>,
+            )
+            .init_resource::<FlipData>()
+            .init_resource::<UniformBindGroup<FlipUniform>>()
+            .add_system_to_stage(RenderStage::Prepare, prepare)
+            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<FlipUniform>>();
     }
 }
 
-#[allow(clippy::type_complexity)]
-pub(crate) fn add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Flip>>,
-    cameras: Query<(Entity, &FlipSettings), (With<Camera>, Without<Handle<Flip>>)>,
+fn prepare(
+    data: Res<FlipData>,
+    mut views: Query<(
+        Entity,
+        &mut RenderPhase<PostProcessingPhaseItem>,
+        &VfxOrdering<FlipSettings>,
+    )>,
+    draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Flip {
-            flip: FlipUniform::from(*settings),
+    for (entity, mut phase, order) in views.iter_mut() {
+        let draw_function = draw_functions
+            .read()
+            .id::<DrawWithDynamicUniform<FlipUniform>>();
+
+        phase.add(PostProcessingPhaseItem {
+            entity,
+            sort_key: (*order).into(),
+            draw_function,
+            pipeline_id: data.pipeline_id,
         });
-        commands.entity(entity).insert(material_handle);
     }
 }
 
-#[derive(Debug, ShaderType, Clone)]
-pub(crate) struct FlipUniform {
+fn queue(
+    render_device: Res<RenderDevice>,
+    data: Res<FlipData>,
+    mut bind_group: ResMut<UniformBindGroup<FlipUniform>>,
+    uniforms: Res<ComponentUniforms<FlipUniform>>,
+    views: Query<Entity, With<FlipUniform>>,
+) {
+    bind_group.inner = None;
+
+    if let Some(uniforms) = uniforms.binding() {
+        if !views.is_empty() {
+            bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Flip Uniform Bind Group"),
+                layout: &data.uniform_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms.clone(),
+                }],
+            }));
+        }
+    }
+}
+
+/// The uniform representation of [`FlipSettings`].
+#[derive(Debug, ShaderType, Clone, Component)]
+pub struct FlipUniform {
     pub(crate) x: f32,
     pub(crate) y: f32,
 }
@@ -55,20 +145,6 @@ impl From<FlipSettings> for FlipUniform {
         };
 
         Self { x: uv[0], y: uv[1] }
-    }
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "cbb6349e-7a00-11ed-8a99-63067e99f73e"]
-pub struct Flip {
-    #[uniform(0)]
-    pub(crate) flip: FlipUniform,
-}
-
-impl Material2d for Flip {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(FLIP_SHADER_HANDLE, "shaders/flip3.wgsl")
     }
 }
 
@@ -90,11 +166,15 @@ pub enum FlipSettings {
 }
 
 impl ExtractComponent for FlipSettings {
-    type Query = &'static Self;
+    type Query = (&'static Self, &'static Camera);
     type Filter = ();
-    type Out = Self;
+    type Out = FlipUniform;
 
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
+    fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        if !camera.is_active {
+            return None;
+        }
+
+        Some((*settings).into())
     }
 }

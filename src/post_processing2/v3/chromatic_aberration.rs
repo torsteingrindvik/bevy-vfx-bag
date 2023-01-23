@@ -1,65 +1,137 @@
-use crate::shader_ref;
 use std::f32::consts::PI;
 
-use bevy::{
+pub(crate) use bevy::{
+    asset::load_internal_asset,
     ecs::query::QueryItem,
     prelude::*,
     reflect::TypeUuid,
     render::{
-        extract_component::ExtractComponent,
-        render_resource::{AsBindGroup, ShaderRef, ShaderType},
+        extract_component::{
+            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+        },
+        render_phase::{AddRenderCommand, DrawFunctions, RenderPhase},
+        render_resource::{
+            BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
+            BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
+        },
+        renderer::RenderDevice,
+        RenderStage,
     },
-    sprite::Material2d,
 };
 
-use super::post_processing_plugin;
+use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+
+use super::{PostProcessingPhaseItem, VfxOrdering};
 
 pub(crate) const CHROMATIC_ABERRATION_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 4357337502039082134);
 
-pub(crate) struct Plugin;
+#[derive(Resource)]
+pub(crate) struct ChromaticAberrationData {
+    pub pipeline_id: CachedRenderPipelineId,
+    pub uniform_layout: BindGroupLayout,
+}
 
+impl FromWorld for ChromaticAberrationData {
+    fn from_world(world: &mut World) -> Self {
+        let (uniform_layout, pipeline_id) = super::create_layout_and_pipeline(
+            world,
+            "ChromaticAberration",
+            &[BindGroupLayoutEntry {
+                binding: 0,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: Some(ChromaticAberrationSettings::min_size()),
+                },
+                visibility: ShaderStages::FRAGMENT,
+                count: None,
+            }],
+            CHROMATIC_ABERRATION_SHADER_HANDLE.typed(),
+        );
+
+        ChromaticAberrationData {
+            pipeline_id,
+            uniform_layout,
+        }
+    }
+}
+
+pub(crate) struct Plugin;
 impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
-        app.add_system(add_material)
-            .add_plugin(post_processing_plugin::Plugin::<
-                ChromaticAberration,
-                ChromaticAberrationSettings,
-            >::default());
-    }
-}
-
-#[allow(clippy::type_complexity)]
-pub(crate) fn add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<ChromaticAberration>>,
-    cameras: Query<
-        (Entity, &ChromaticAberrationSettings),
-        (With<Camera>, Without<Handle<ChromaticAberration>>),
-    >,
-) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(ChromaticAberration {
-            chromatic_aberration: *settings,
-        });
-        commands.entity(entity).insert(material_handle);
-    }
-}
-
-/// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "c3ca158a-7bbc-11ed-aa78-8bb169d04615"]
-pub struct ChromaticAberration {
-    #[uniform(0)]
-    pub(crate) chromatic_aberration: ChromaticAberrationSettings,
-}
-
-impl Material2d for ChromaticAberration {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(
+        load_internal_asset!(
+            app,
             CHROMATIC_ABERRATION_SHADER_HANDLE,
-            "shaders/chromatic-aberration3.wgsl"
-        )
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/shaders/",
+                "chromatic-aberration3.wgsl"
+            ),
+            Shader::from_wgsl
+        );
+
+        // This puts the uniform into the render world.
+        app.add_plugin(ExtractComponentPlugin::<ChromaticAberrationSettings>::default())
+            .add_plugin(UniformComponentPlugin::<ChromaticAberrationSettings>::default());
+
+        super::render_app(app)
+            .add_system_to_stage(
+                RenderStage::Extract,
+                super::extract_post_processing_camera_phases::<ChromaticAberrationSettings>,
+            )
+            .init_resource::<ChromaticAberrationData>()
+            .init_resource::<UniformBindGroup<ChromaticAberrationSettings>>()
+            .add_system_to_stage(RenderStage::Prepare, prepare)
+            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<ChromaticAberrationSettings>>(
+            );
+    }
+}
+
+fn prepare(
+    data: Res<ChromaticAberrationData>,
+    mut views: Query<(
+        Entity,
+        &mut RenderPhase<PostProcessingPhaseItem>,
+        &VfxOrdering<ChromaticAberrationSettings>,
+    )>,
+    draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
+) {
+    for (entity, mut phase, order) in views.iter_mut() {
+        let draw_function = draw_functions
+            .read()
+            .id::<DrawWithDynamicUniform<ChromaticAberrationSettings>>();
+
+        phase.add(PostProcessingPhaseItem {
+            entity,
+            sort_key: (*order).into(),
+            draw_function,
+            pipeline_id: data.pipeline_id,
+        });
+    }
+}
+
+fn queue(
+    render_device: Res<RenderDevice>,
+    data: Res<ChromaticAberrationData>,
+    mut bind_group: ResMut<UniformBindGroup<ChromaticAberrationSettings>>,
+    uniforms: Res<ComponentUniforms<ChromaticAberrationSettings>>,
+    views: Query<Entity, With<ChromaticAberrationSettings>>,
+) {
+    bind_group.inner = None;
+
+    if let Some(uniforms) = uniforms.binding() {
+        if !views.is_empty() {
+            bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {
+                label: Some("ChromaticAberration Uniform Bind Group"),
+                layout: &data.uniform_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms.clone(),
+                }],
+            }));
+        }
     }
 }
 
@@ -104,11 +176,15 @@ impl Default for ChromaticAberrationSettings {
 }
 
 impl ExtractComponent for ChromaticAberrationSettings {
-    type Query = &'static Self;
+    type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;
 
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
+    fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        if !camera.is_active {
+            return None;
+        }
+
+        Some(*settings)
     }
 }
