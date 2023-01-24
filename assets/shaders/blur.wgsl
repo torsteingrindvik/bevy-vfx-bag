@@ -2,9 +2,9 @@
 #import bevy_pbr::mesh_view_types
 
 @group(0) @binding(0)
-var source: texture_2d<f32>;
+var t: texture_2d<f32>;
 @group(0) @binding(1)
-var source_sampler: sampler;
+var ts: sampler;
 @group(0) @binding(2)
 var<uniform> globals: Globals;
 
@@ -12,17 +12,19 @@ struct Blur {
     amount: f32,
     kernel_radius: f32
 };
-@group(0) @binding(3)
+@group(1) @binding(0)
 var<uniform> blur: Blur;
 
 fn s(uv: vec2<f32>) -> vec3<f32> {
-    return textureSample(source, source_sampler, uv).rgb;
+    return textureSample(t, ts, uv).rgb;
 }
 
 fn p(x: f32, y: f32) -> vec2<f32> {
     return vec2<f32>(x, y) * blur.kernel_radius;
 }
 
+// TODO: Use a specialized pipeline with keys
+// to allow different blur kernels
 fn s_blurred(uv: vec2<f32>) -> vec3<f32> {
     let r = p(1.0, 0.0);
     let tr = p(1.0, 1.0);

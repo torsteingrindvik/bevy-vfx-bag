@@ -57,11 +57,11 @@ pub mod masks;
 /// Pixelate
 pub mod pixelate;
 
-// Raindrops
-// pub mod raindrops;
+/// Raindrops
+pub mod raindrops;
 
-// Wave
-// pub mod wave;
+/// Wave
+pub mod wave;
 
 #[derive(Resource)]
 pub(crate) struct UniformBindGroup<U: ShaderType> {
@@ -82,9 +82,9 @@ where
 }
 
 /// TODO
-struct SetDynamicUniform<U: Component + ShaderType, const I: usize>(PhantomData<U>);
+struct SetEffectBindGroup<U: Component + ShaderType, const I: usize>(PhantomData<U>);
 impl<P: PhaseItem, U: Component + ShaderType, const I: usize> RenderCommand<P>
-    for SetDynamicUniform<U, I>
+    for SetEffectBindGroup<U, I>
 {
     type Param = SRes<UniformBindGroup<U>>;
     type ViewWorldQuery = ();
@@ -107,7 +107,7 @@ impl<P: PhaseItem, U: Component + ShaderType, const I: usize> RenderCommand<P>
     }
 }
 
-type DrawWithDynamicUniform<U> = (
+type DrawPostProcessingEffect<U> = (
     // The pipeline must be set in order to use the correct bind group,
     // access the correct shaders, and so on.
     SetItemPipeline,
@@ -115,8 +115,10 @@ type DrawWithDynamicUniform<U> = (
     // first bind group, which has the input texture (the scene) and
     // the sampler for that.
     SetTextureSamplerGlobals<0>,
-    // TODO
-    SetDynamicUniform<U, 1>,
+    // Here we set the bind group for the effect.
+    // This is the second bind group, which for all effects has a uniform (at some offset), and optionally
+    // more bind group entries.
+    SetEffectBindGroup<U, 1>,
     // Lastly we draw vertices.
     // This is simple for a post processing effect, since we just draw
     // a full screen triangle.
@@ -586,9 +588,9 @@ impl Plugin for PostProcessingPlugin {
         app.add_plugin(flip::Plugin);
         // app.add_plugin(lut::Plugin);
         app.add_plugin(masks::Plugin);
-        // app.add_plugin(raindrops::Plugin);
+        app.add_plugin(raindrops::Plugin);
         app.add_plugin(pixelate::Plugin);
-        // app.add_plugin(wave::Plugin);
+        app.add_plugin(wave::Plugin);
     }
 }
 

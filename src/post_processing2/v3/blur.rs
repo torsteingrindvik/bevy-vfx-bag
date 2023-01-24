@@ -17,7 +17,7 @@ use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+use crate::post_processing2::v3::{DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
@@ -40,7 +40,7 @@ impl FromWorld for BlurData {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(BlurSettings::min_size()),
+                    min_binding_size: Some(Blur::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
@@ -61,24 +61,24 @@ impl bevy::prelude::Plugin for Plugin {
         load_internal_asset!(
             app,
             BLUR_SHADER_HANDLE,
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "blur3.wgsl"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "blur.wgsl"),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<BlurSettings>::default())
-            .add_plugin(UniformComponentPlugin::<BlurSettings>::default());
+        app.add_plugin(ExtractComponentPlugin::<Blur>::default())
+            .add_plugin(UniformComponentPlugin::<Blur>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<BlurSettings>,
+                super::extract_post_processing_camera_phases::<Blur>,
             )
             .init_resource::<BlurData>()
-            .init_resource::<UniformBindGroup<BlurSettings>>()
+            .init_resource::<UniformBindGroup<Blur>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<BlurSettings>>();
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Blur>>();
     }
 }
 
@@ -87,14 +87,12 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<BlurSettings>,
+        &VfxOrdering<Blur>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
-        let draw_function = draw_functions
-            .read()
-            .id::<DrawWithDynamicUniform<BlurSettings>>();
+        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Blur>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -108,9 +106,9 @@ fn prepare(
 fn queue(
     render_device: Res<RenderDevice>,
     data: Res<BlurData>,
-    mut bind_group: ResMut<UniformBindGroup<BlurSettings>>,
-    uniforms: Res<ComponentUniforms<BlurSettings>>,
-    views: Query<Entity, With<BlurSettings>>,
+    mut bind_group: ResMut<UniformBindGroup<Blur>>,
+    uniforms: Res<ComponentUniforms<Blur>>,
+    views: Query<Entity, With<Blur>>,
 ) {
     bind_group.inner = None;
 
@@ -130,7 +128,7 @@ fn queue(
 
 /// Blur settings.
 #[derive(Debug, Copy, Clone, Component, ShaderType)]
-pub struct BlurSettings {
+pub struct Blur {
     /// How blurry the output image should be.
     /// If `0.0`, no blur is applied.
     /// `1.0` is "fully blurred", but higher values will produce interesting results.
@@ -142,7 +140,7 @@ pub struct BlurSettings {
     pub kernel_radius: f32,
 }
 
-impl Default for BlurSettings {
+impl Default for Blur {
     fn default() -> Self {
         Self {
             amount: 0.5,
@@ -151,7 +149,7 @@ impl Default for BlurSettings {
     }
 }
 
-impl ExtractComponent for BlurSettings {
+impl ExtractComponent for Blur {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;

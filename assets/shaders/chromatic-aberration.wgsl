@@ -2,9 +2,9 @@
 #import bevy_pbr::mesh_view_types
 
 @group(0) @binding(0)
-var source: texture_2d<f32>;
+var t: texture_2d<f32>;
 @group(0) @binding(1)
-var source_sampler: sampler;
+var ts: sampler;
 @group(0) @binding(2)
 var<uniform> globals: Globals;
 
@@ -19,15 +19,16 @@ struct ChromaticAberration {
     magnitude_b: f32,
 };
 
-@group(0) @binding(3)
-var<uniform> chromatic_aberration: ChromaticAberration;
+@group(1) @binding(0)
+var<uniform> ca: ChromaticAberration;
+
 
 @fragment
 fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let out = vec3<f32>(
-        textureSample(source, source_sampler, in.uv + (chromatic_aberration.dir_r * chromatic_aberration.magnitude_r)).r,
-        textureSample(source, source_sampler, in.uv + (chromatic_aberration.dir_g * chromatic_aberration.magnitude_g)).g,
-        textureSample(source, source_sampler, in.uv + (chromatic_aberration.dir_b * chromatic_aberration.magnitude_b)).b,
+        textureSample(t, ts, in.uv + (ca.dir_r * ca.magnitude_r)).r,
+        textureSample(t, ts, in.uv + (ca.dir_g * ca.magnitude_g)).g,
+        textureSample(t, ts, in.uv + (ca.dir_b * ca.magnitude_b)).b,
     );
 
     return vec4<f32>(out, 1.0);

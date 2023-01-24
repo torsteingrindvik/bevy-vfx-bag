@@ -4,8 +4,8 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy_vfx_bag::post_processing2::v3::{
-    blur::BlurSettings, chromatic_aberration::ChromaticAberrationSettings, flip::FlipSettings,
-    masks::MaskSettings, pixelate::PixelateSettings, PostProcessingPlugin, VfxOrdering,
+    blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, masks::Mask,
+    pixelate::Pixelate, raindrops::Raindrops, wave::Wave, PostProcessingPlugin, VfxOrdering,
 };
 
 fn main() {
@@ -19,6 +19,8 @@ fn main() {
         .run();
 }
 
+// TODO: PostProcessingBundle { effect, ordering }
+
 fn startup(mut commands: Commands) {
     commands.spawn((
         Camera3dBundle {
@@ -26,22 +28,30 @@ fn startup(mut commands: Commands) {
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
         },
-        BlurSettings::default(),
-        VfxOrdering::<BlurSettings>::new(0.0),
-        PixelateSettings::default(),
-        VfxOrdering::<PixelateSettings>::new(1.0),
-        ChromaticAberrationSettings::default(),
-        VfxOrdering::<ChromaticAberrationSettings>::new(2.0),
-        FlipSettings::Vertical,
-        VfxOrdering::<FlipSettings>::new(2.0),
-        MaskSettings::new_vignette(),
-        VfxOrdering::<MaskSettings>::new(3.0),
+        Blur::default(),
+        VfxOrdering::<Blur>::new(0.0),
+        Pixelate::default(),
+        VfxOrdering::<Pixelate>::new(1.0),
+        ChromaticAberration::default(),
+        VfxOrdering::<ChromaticAberration>::new(2.0),
+        Flip::Vertical,
+        VfxOrdering::<Flip>::new(2.0),
+        Mask::new_vignette(),
+        VfxOrdering::<Mask>::new(3.0),
+        Wave {
+            waves_x: 3.,
+            speed_x: 0.5,
+            amplitude_x: 0.1,
+            ..Default::default()
+        },
+        Raindrops::default(),
+        VfxOrdering::<Raindrops>::new(4.0),
     ));
 }
 
 fn update(
     keyboard_input: Res<Input<KeyCode>>,
-    mut blur: Query<&BlurSettings>,
+    mut blur: Query<&Blur>,
     // mut text: ResMut<examples_common::ExampleText>,
 ) {
     let mut pixelate_diff = 0.0;

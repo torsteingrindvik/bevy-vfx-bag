@@ -1,18 +1,17 @@
-// Credits to Ben Cloward, see: https://www.youtube.com/watch?v=HcMFgJas0yg
+#import bevy_core_pipeline::fullscreen_vertex_shader
+#import bevy_pbr::mesh_view_types
 
-#import bevy_sprite::mesh2d_view_bindings
-#import bevy_pbr::utils
-
-@group(1) @binding(0)
-var texture: texture_2d<f32>;
-
-@group(1) @binding(1)
-var our_sampler: sampler;
+@group(0) @binding(0)
+var t: texture_2d<f32>;
+@group(0) @binding(1)
+var ts: sampler;
+@group(0) @binding(2)
+var<uniform> globals: Globals;
 
 struct Mask {
     strength: f32,
 };
-@group(1) @binding(2)
+@group(1) @binding(0)
 var<uniform> mask: Mask;
 
 // TODO: Use built-in saturate when naga 0.10.0 is in Bevy.
@@ -76,23 +75,19 @@ fn vignette(uv: vec2<f32>) -> f32 {
 }
 #endif
 
-fn fragment_impl(
-    position: vec4<f32>,
-    uv: vec2<f32>
-) -> vec4<f32> {
-    let t = textureSample(texture, our_sampler, uv);
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    let sample = textureSample(t, ts, in.uv);
 
     #ifdef SQUARE
-    let mask = square(uv);
+    let result = square(in.uv);
     #endif
     #ifdef CRT
-    let mask = crt(uv);
+    let result = crt(in.uv);
     #endif
     #ifdef VIGNETTE
-    let mask = vignette(uv);
+    let result = vignette(in.uv);
     #endif
 
-    return vec4<f32>(t.rgb * mask, 1.0);
+    return vec4<f32>(sample.rgb * result, 1.0);
 }
-
-#import bevy_vfx_bag::post_processing_passthrough

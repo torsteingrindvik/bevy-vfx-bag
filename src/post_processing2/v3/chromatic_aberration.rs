@@ -19,7 +19,7 @@ pub(crate) use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
@@ -42,7 +42,7 @@ impl FromWorld for ChromaticAberrationData {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(ChromaticAberrationSettings::min_size()),
+                    min_binding_size: Some(ChromaticAberration::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
@@ -66,25 +66,25 @@ impl bevy::prelude::Plugin for Plugin {
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/shaders/",
-                "chromatic-aberration3.wgsl"
+                "chromatic-aberration.wgsl"
             ),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<ChromaticAberrationSettings>::default())
-            .add_plugin(UniformComponentPlugin::<ChromaticAberrationSettings>::default());
+        app.add_plugin(ExtractComponentPlugin::<ChromaticAberration>::default())
+            .add_plugin(UniformComponentPlugin::<ChromaticAberration>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<ChromaticAberrationSettings>,
+                super::extract_post_processing_camera_phases::<ChromaticAberration>,
             )
             .init_resource::<ChromaticAberrationData>()
-            .init_resource::<UniformBindGroup<ChromaticAberrationSettings>>()
+            .init_resource::<UniformBindGroup<ChromaticAberration>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<ChromaticAberrationSettings>>(
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<ChromaticAberration>>(
             );
     }
 }
@@ -94,14 +94,14 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<ChromaticAberrationSettings>,
+        &VfxOrdering<ChromaticAberration>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
         let draw_function = draw_functions
             .read()
-            .id::<DrawWithDynamicUniform<ChromaticAberrationSettings>>();
+            .id::<DrawPostProcessingEffect<ChromaticAberration>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -115,9 +115,9 @@ fn prepare(
 fn queue(
     render_device: Res<RenderDevice>,
     data: Res<ChromaticAberrationData>,
-    mut bind_group: ResMut<UniformBindGroup<ChromaticAberrationSettings>>,
-    uniforms: Res<ComponentUniforms<ChromaticAberrationSettings>>,
-    views: Query<Entity, With<ChromaticAberrationSettings>>,
+    mut bind_group: ResMut<UniformBindGroup<ChromaticAberration>>,
+    uniforms: Res<ComponentUniforms<ChromaticAberration>>,
+    views: Query<Entity, With<ChromaticAberration>>,
 ) {
     bind_group.inner = None;
 
@@ -137,7 +137,7 @@ fn queue(
 
 /// Chromatic Aberration settings.
 #[derive(Debug, Copy, Clone, Component, ShaderType)]
-pub struct ChromaticAberrationSettings {
+pub struct ChromaticAberration {
     /// The direction (in UV space) the red channel is offset in.
     /// Will be normalized.
     pub dir_r: Vec2,
@@ -160,7 +160,7 @@ pub struct ChromaticAberrationSettings {
     pub magnitude_b: f32,
 }
 
-impl Default for ChromaticAberrationSettings {
+impl Default for ChromaticAberration {
     fn default() -> Self {
         let one_third = (2. / 3.) * PI;
 
@@ -175,7 +175,7 @@ impl Default for ChromaticAberrationSettings {
     }
 }
 
-impl ExtractComponent for ChromaticAberrationSettings {
+impl ExtractComponent for ChromaticAberration {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;

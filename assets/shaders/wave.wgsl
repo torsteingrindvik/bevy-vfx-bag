@@ -1,6 +1,8 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_pbr::utils
 #import bevy_pbr::mesh_view_types
+// #import bevy_pbr::utils
+// https://github.com/bevyengine/bevy/issues/7353
+let PI: f32 = 3.141592653589793;
 
 @group(0) @binding(0)
 var source: texture_2d<f32>;
@@ -20,7 +22,7 @@ struct Wave {
     amplitude_y: f32
 };
 
-@group(0) @binding(3)
+@group(1) @binding(0)
 var<uniform> wave: Wave;
 
 @fragment

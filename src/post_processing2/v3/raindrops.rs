@@ -1,140 +1,210 @@
-use bevy::{
+use bevy::render::{
+    extract_resource::{ExtractResource, ExtractResourcePlugin},
+    render_asset::RenderAssets,
+    render_resource::{
+        AddressMode, BindingResource, Sampler, SamplerBindingType, SamplerDescriptor,
+        TextureSampleType, TextureViewDimension,
+    },
+};
+pub(crate) use bevy::{
+    asset::load_internal_asset,
     ecs::query::QueryItem,
     prelude::*,
     reflect::TypeUuid,
     render::{
-        extract_component::ExtractComponent,
-        render_resource::{AddressMode, AsBindGroup, SamplerDescriptor, ShaderRef, ShaderType},
-        texture::ImageSampler,
+        extract_component::{
+            ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
+        },
+        render_phase::{AddRenderCommand, DrawFunctions, RenderPhase},
+        render_resource::{
+            BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
+            BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
+        },
+        renderer::RenderDevice,
+        RenderStage,
     },
-    sprite::Material2d,
 };
 
-pub(crate) struct Plugin;
+use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
 
-impl bevy::prelude::Plugin for Plugin {
-    fn build(&self, app: &mut App) {
-        let texture = RaindropsTexture(load_image!(app, "textures/raindrops.tga", "tga", true));
-
-        app.insert_resource(texture)
-            .add_system(fix_material)
-            .add_system(add_material)
-            .add_plugin(post_processing_plugin::Plugin::<Raindrops, RaindropsSettings>::default());
-    }
-}
-
-#[derive(Resource, Deref, DerefMut)]
-struct RaindropsTexture(Handle<Image>);
-
-use crate::{load_image, shader_ref};
-
-use super::post_processing_plugin;
+use super::{PostProcessingPhaseItem, VfxOrdering};
 
 pub(crate) const RAINDROPS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3481202994982538867);
 
-fn fix_material(
-    mut ev_asset: EventReader<AssetEvent<Image>>,
-    mut assets: ResMut<Assets<Image>>,
-    // TODO: Probably why --release fails, we have to "tag" it after fixup
-    mut raindrops_handle: ResMut<RaindropsTexture>,
-    mut materials: ResMut<Assets<Raindrops>>,
-) {
-    for ev in ev_asset.iter() {
-        if let AssetEvent::Created { handle } = ev {
-            info!("Handle to asset created: {:?}", handle);
+#[derive(Resource, ExtractResource, Deref, DerefMut, Clone)]
+struct RaindropsTextureHandle(Handle<Image>);
 
-            if *handle == **raindrops_handle {
-                // fixup_raindrops(handle, &mut assets, &mut raindrop_materials);
-                let image = assets
-                    .get_mut(handle)
-                    .expect("Handle should point to asset");
+#[derive(Resource)]
+pub(crate) struct RaindropsData {
+    pub pipeline_id: CachedRenderPipelineId,
+    pub layout: BindGroupLayout,
+    pub sampler: Sampler,
+}
 
-                image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-                    label: Some("Repeat Sampler"),
-                    address_mode_u: AddressMode::Repeat,
-                    address_mode_v: AddressMode::Repeat,
-                    address_mode_w: AddressMode::Repeat,
-                    ..default()
-                });
+impl FromWorld for RaindropsData {
+    fn from_world(world: &mut World) -> Self {
+        let (raindrops_layout, pipeline_id) = super::create_layout_and_pipeline(
+            world,
+            "Raindrops",
+            &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: Some(Raindrops::min_size()),
+                    },
+                    visibility: ShaderStages::FRAGMENT,
+                    count: None,
+                },
+            ],
+            RAINDROPS_SHADER_HANDLE.typed(),
+        );
 
-                for (_, _material) in materials.iter_mut() {
-                    // This mutable "access" is needed to trigger the usage of the new sampler.
-                    info!("Material is pointing to: {:?}", _material.color_texture);
-                }
-            }
+        let raindrops_sampler = world
+            .get_resource::<RenderDevice>()
+            .expect("Should have render device")
+            .create_sampler(&SamplerDescriptor {
+                label: Some("Raindrops Sampler"),
+                address_mode_u: AddressMode::Repeat,
+                address_mode_v: AddressMode::Repeat,
+                address_mode_w: AddressMode::Repeat,
+                ..default()
+            });
+
+        RaindropsData {
+            pipeline_id,
+            layout: raindrops_layout,
+            sampler: raindrops_sampler,
         }
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Raindrops>>,
+pub(crate) struct Plugin;
+impl bevy::prelude::Plugin for Plugin {
+    fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            RAINDROPS_SHADER_HANDLE,
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/shaders/",
+                "raindrops.wgsl"
+            ),
+            Shader::from_wgsl
+        );
 
-    // TODO: Could we change this to be a component, then add an "Unfixed" marker?
-    // Then remove that after fixing, and this system generally uses Without<Unfixed>?
-    handle: Res<RaindropsTexture>,
+        let asset_server = app.world.resource::<AssetServer>();
+        let texture_handle: Handle<Image> = asset_server.load("textures/raindrops.tga");
 
-    cameras: Query<(Entity, &RaindropsSettings), (With<Camera>, Without<Handle<Raindrops>>)>,
+        // This puts the uniform into the render world.
+        app.add_plugin(ExtractComponentPlugin::<Raindrops>::default())
+            .add_plugin(UniformComponentPlugin::<Raindrops>::default())
+            .add_plugin(ExtractResourcePlugin::<RaindropsTextureHandle>::default())
+            .insert_resource(RaindropsTextureHandle(texture_handle));
+
+        super::render_app(app)
+            .add_system_to_stage(
+                RenderStage::Extract,
+                super::extract_post_processing_camera_phases::<Raindrops>,
+            )
+            .init_resource::<RaindropsData>()
+            .init_resource::<UniformBindGroup<Raindrops>>()
+            .add_system_to_stage(RenderStage::Prepare, prepare)
+            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Raindrops>>();
+    }
+}
+
+fn prepare(
+    data: Res<RaindropsData>,
+    mut views: Query<(
+        Entity,
+        &mut RenderPhase<PostProcessingPhaseItem>,
+        &VfxOrdering<Raindrops>,
+    )>,
+    draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
-    for (entity, settings) in cameras.iter() {
-        let material_handle = assets.add(Raindrops {
-            color_texture: handle.0.clone(),
-            raindrops: RaindropsUniform {
-                time_scaling: settings.time_scaling,
-                intensity: settings.intensity,
-                zoom: settings.zoom,
-            },
+    for (entity, mut phase, order) in views.iter_mut() {
+        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Raindrops>>();
+
+        phase.add(PostProcessingPhaseItem {
+            entity,
+            sort_key: (*order).into(),
+            draw_function,
+            pipeline_id: data.pipeline_id,
         });
-        commands.entity(entity).insert(material_handle);
     }
 }
 
-#[derive(Debug, ShaderType, Clone)]
-pub(crate) struct RaindropsUniform {
-    pub(crate) time_scaling: f32,
-    pub(crate) intensity: f32,
-    pub(crate) zoom: f32,
-}
+fn queue(
+    render_device: Res<RenderDevice>,
+    data: Res<RaindropsData>,
+    texture_handle: Res<RaindropsTextureHandle>,
+    mut bind_group: ResMut<UniformBindGroup<Raindrops>>,
+    uniforms: Res<ComponentUniforms<Raindrops>>,
+    images: Res<RenderAssets<Image>>,
+    views: Query<Entity, With<Raindrops>>,
+) {
+    bind_group.inner = None;
 
-impl Default for RaindropsUniform {
-    fn default() -> Self {
-        Self {
-            time_scaling: 0.8,
-            intensity: 0.03,
-            zoom: 1.0,
+    if let (Some(uniforms), Some(raindrops_image)) =
+        (uniforms.binding(), images.get(&texture_handle))
+    {
+        if !views.is_empty() {
+            bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Raindrops Uniform Bind Group"),
+                layout: &data.layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&raindrops_image.texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&data.sampler),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: uniforms.clone(),
+                    },
+                ],
+            }));
         }
     }
 }
 
 /// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "4fba30ae-73e6-11ed-8575-9b008b9044f0"]
+#[derive(Debug, Component, Clone, Copy, ShaderType)]
 pub struct Raindrops {
-    #[texture(0)]
-    #[sampler(1)]
-    pub(crate) color_texture: Handle<Image>,
+    /// How quickly the raindrops animate.
+    pub time_scaling: f32,
 
-    #[uniform(2)]
-    pub(crate) raindrops: RaindropsUniform,
+    /// How much the raindrops warp the image.
+    pub intensity: f32,
+
+    /// How zoomed in the raindrops texture is.
+    pub zoom: f32,
 }
 
-impl Material2d for Raindrops {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(RAINDROPS_SHADER_HANDLE, "shaders/raindrops3.wgsl")
-    }
-}
-
-/// TODO
-#[derive(Debug, Component, Clone, Copy)]
-pub struct RaindropsSettings {
-    pub(crate) time_scaling: f32,
-    pub(crate) intensity: f32,
-    pub(crate) zoom: f32,
-}
-
-impl Default for RaindropsSettings {
+impl Default for Raindrops {
     fn default() -> Self {
         Self {
             time_scaling: 0.8,
@@ -144,12 +214,16 @@ impl Default for RaindropsSettings {
     }
 }
 
-impl ExtractComponent for RaindropsSettings {
-    type Query = &'static Self;
+impl ExtractComponent for Raindrops {
+    type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;
 
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(*item)
+    fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        if !camera.is_active {
+            return None;
+        }
+
+        Some(*settings)
     }
 }

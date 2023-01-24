@@ -17,7 +17,7 @@ pub(crate) use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
@@ -40,7 +40,7 @@ impl FromWorld for PixelateData {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(PixelateSettings::min_size()),
+                    min_binding_size: Some(Pixelate::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
@@ -64,26 +64,25 @@ impl bevy::prelude::Plugin for Plugin {
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/assets/shaders/",
-                "pixelate3.wgsl"
+                "pixelate.wgsl"
             ),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<PixelateSettings>::default())
-            .add_plugin(UniformComponentPlugin::<PixelateSettings>::default());
+        app.add_plugin(ExtractComponentPlugin::<Pixelate>::default())
+            .add_plugin(UniformComponentPlugin::<Pixelate>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<PixelateSettings>,
+                super::extract_post_processing_camera_phases::<Pixelate>,
             )
             .init_resource::<PixelateData>()
-            .init_resource::<UniformBindGroup<PixelateSettings>>()
+            .init_resource::<UniformBindGroup<Pixelate>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<PixelateSettings>>(
-            );
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Pixelate>>();
     }
 }
 
@@ -92,14 +91,14 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<PixelateSettings>,
+        &VfxOrdering<Pixelate>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
         let draw_function = draw_functions
             .read()
-            .id::<DrawWithDynamicUniform<PixelateSettings>>();
+            .id::<DrawPostProcessingEffect<Pixelate>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -113,9 +112,9 @@ fn prepare(
 fn queue(
     render_device: Res<RenderDevice>,
     data: Res<PixelateData>,
-    mut bind_group: ResMut<UniformBindGroup<PixelateSettings>>,
-    uniforms: Res<ComponentUniforms<PixelateSettings>>,
-    views: Query<Entity, With<PixelateSettings>>,
+    mut bind_group: ResMut<UniformBindGroup<Pixelate>>,
+    uniforms: Res<ComponentUniforms<Pixelate>>,
+    views: Query<Entity, With<Pixelate>>,
 ) {
     bind_group.inner = None;
 
@@ -135,17 +134,17 @@ fn queue(
 
 /// TODO
 #[derive(Debug, ShaderType, Component, Clone, Copy)]
-pub struct PixelateSettings {
+pub struct Pixelate {
     pub(crate) block_size: f32,
 }
 
-impl Default for PixelateSettings {
+impl Default for Pixelate {
     fn default() -> Self {
         Self { block_size: 8.0 }
     }
 }
 
-impl ExtractComponent for PixelateSettings {
+impl ExtractComponent for Pixelate {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;

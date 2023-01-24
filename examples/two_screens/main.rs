@@ -8,9 +8,8 @@ use bevy::{
 };
 
 use bevy_vfx_bag::post_processing2::v3::{
-    blur::BlurSettings, chromatic_aberration::ChromaticAberrationSettings, flip::FlipSettings,
-    lut::LutSettings, masks::MaskSettings, pixelate::PixelateSettings,
-    raindrops::RaindropsSettings, PostProcessingPlugin, VfxOrdering,
+    blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, lut::LutSettings,
+    masks::Mask, pixelate::Pixelate, raindrops::Raindrops, PostProcessingPlugin, VfxOrdering,
 };
 
 const NUM_EFFECTS: usize = 7;
@@ -21,39 +20,35 @@ struct Effects([&'static str; NUM_EFFECTS]);
 impl Effects {
     fn insert_default(name: &str, priority: f32, entity: Entity, commands: &mut Commands) {
         if name == "Pixelate" {
-            commands.entity(entity).insert((
-                PixelateSettings::default(),
-                VfxOrdering::<PixelateSettings>::new(priority),
-            ));
+            commands
+                .entity(entity)
+                .insert((Pixelate::default(), VfxOrdering::<Pixelate>::new(priority)));
         } else if name == "Raindrops" {
             commands.entity(entity).insert((
-                RaindropsSettings::default(),
-                VfxOrdering::<RaindropsSettings>::new(priority),
+                Raindrops::default(),
+                VfxOrdering::<Raindrops>::new(priority),
             ));
         } else if name == "Flip" {
-            commands.entity(entity).insert((
-                FlipSettings::default(),
-                VfxOrdering::<FlipSettings>::new(priority),
-            ));
+            commands
+                .entity(entity)
+                .insert((Flip::default(), VfxOrdering::<Flip>::new(priority)));
         } else if name == "Mask" {
-            commands.entity(entity).insert((
-                MaskSettings::default(),
-                VfxOrdering::<MaskSettings>::new(priority),
-            ));
+            commands
+                .entity(entity)
+                .insert((Mask::default(), VfxOrdering::<Mask>::new(priority)));
         } else if name == "Lut" {
             commands.entity(entity).insert((
                 LutSettings::default(),
                 VfxOrdering::<LutSettings>::new(priority),
             ));
         } else if name == "Blur" {
-            commands.entity(entity).insert((
-                BlurSettings::default(),
-                VfxOrdering::<BlurSettings>::new(priority),
-            ));
+            commands
+                .entity(entity)
+                .insert((Blur::default(), VfxOrdering::<Blur>::new(priority)));
         } else if name == "ChromaticAberration" {
             commands.entity(entity).insert((
-                ChromaticAberrationSettings::default(),
-                VfxOrdering::<ChromaticAberrationSettings>::new(priority),
+                ChromaticAberration::default(),
+                VfxOrdering::<ChromaticAberration>::new(priority),
             ));
         } else {
             panic!("Unknown effect name");
@@ -62,21 +57,19 @@ impl Effects {
 
     fn remove(name: &str, entity: Entity, commands: &mut Commands) {
         if name == "Pixelate" {
-            commands.entity(entity).remove::<PixelateSettings>();
+            commands.entity(entity).remove::<Pixelate>();
         } else if name == "Raindrops" {
-            commands.entity(entity).remove::<RaindropsSettings>();
+            commands.entity(entity).remove::<Raindrops>();
         } else if name == "Flip" {
-            commands.entity(entity).remove::<FlipSettings>();
+            commands.entity(entity).remove::<Flip>();
         } else if name == "Mask" {
-            commands.entity(entity).remove::<MaskSettings>();
+            commands.entity(entity).remove::<Mask>();
         } else if name == "Lut" {
             commands.entity(entity).remove::<LutSettings>();
         } else if name == "Blur" {
-            commands.entity(entity).remove::<BlurSettings>();
+            commands.entity(entity).remove::<Blur>();
         } else if name == "ChromaticAberration" {
-            commands
-                .entity(entity)
-                .remove::<ChromaticAberrationSettings>();
+            commands.entity(entity).remove::<ChromaticAberration>();
         } else {
             panic!("Unknown effect name");
         }
@@ -124,13 +117,13 @@ struct Window2;
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, effects: Res<Effects>) {
     let vfx_bundle = (
-        PixelateSettings::default(),
-        RaindropsSettings::default(),
-        FlipSettings::default(),
-        MaskSettings::default(),
+        Pixelate::default(),
+        Raindrops::default(),
+        Flip::default(),
+        Mask::default(),
         LutSettings::default(),
-        BlurSettings::default(),
-        ChromaticAberrationSettings::default(),
+        Blur::default(),
+        ChromaticAberration::default(),
     );
 
     commands.spawn((

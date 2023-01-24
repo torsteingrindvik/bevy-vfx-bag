@@ -3,7 +3,7 @@ mod examples_common;
 
 use bevy::prelude::*;
 
-use bevy_vfx_bag::post_processing2::v3::{pixelate::PixelateSettings, PostProcessingPlugin};
+use bevy_vfx_bag::post_processing2::v3::{pixelate::Pixelate, PostProcessingPlugin};
 
 fn main() {
     let mut app = App::new();
@@ -23,13 +23,13 @@ fn startup(mut commands: Commands) {
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
         },
-        PixelateSettings::default(),
+        Pixelate::default(),
     ));
 }
 
 fn update(
     keyboard_input: Res<Input<KeyCode>>,
-    mut pixelate: Query<&PixelateSettings>,
+    mut pixelate: Query<&Pixelate>,
     // mut text: ResMut<examples_common::ExampleText>,
 ) {
     let mut pixelate_diff = 0.0;

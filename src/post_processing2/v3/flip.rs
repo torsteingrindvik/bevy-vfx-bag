@@ -17,7 +17,7 @@ use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawWithDynamicUniform, UniformBindGroup};
+use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
@@ -61,24 +61,24 @@ impl bevy::prelude::Plugin for Plugin {
         load_internal_asset!(
             app,
             FLIP_SHADER_HANDLE,
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "flip3.wgsl"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "flip.wgsl"),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<FlipSettings>::default())
+        app.add_plugin(ExtractComponentPlugin::<Flip>::default())
             .add_plugin(UniformComponentPlugin::<FlipUniform>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<FlipSettings>,
+                super::extract_post_processing_camera_phases::<Flip>,
             )
             .init_resource::<FlipData>()
             .init_resource::<UniformBindGroup<FlipUniform>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<FlipUniform>>();
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<FlipUniform>>();
     }
 }
 
@@ -87,14 +87,14 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<FlipSettings>,
+        &VfxOrdering<Flip>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
         let draw_function = draw_functions
             .read()
-            .id::<DrawWithDynamicUniform<FlipUniform>>();
+            .id::<DrawPostProcessingEffect<FlipUniform>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -135,13 +135,13 @@ pub struct FlipUniform {
     pub(crate) y: f32,
 }
 
-impl From<FlipSettings> for FlipUniform {
-    fn from(flip: FlipSettings) -> Self {
+impl From<Flip> for FlipUniform {
+    fn from(flip: Flip) -> Self {
         let uv = match flip {
-            FlipSettings::None => [0.0, 0.0],
-            FlipSettings::Horizontal => [1.0, 0.0],
-            FlipSettings::Vertical => [0.0, 1.0],
-            FlipSettings::HorizontalVertical => [1.0, 1.0],
+            Flip::None => [0.0, 0.0],
+            Flip::Horizontal => [1.0, 0.0],
+            Flip::Vertical => [0.0, 1.0],
+            Flip::HorizontalVertical => [1.0, 1.0],
         };
 
         Self { x: uv[0], y: uv[1] }
@@ -150,7 +150,7 @@ impl From<FlipSettings> for FlipUniform {
 
 /// Which way to flip the texture.
 #[derive(Debug, Default, Copy, Clone, Component)]
-pub enum FlipSettings {
+pub enum Flip {
     /// Don't flip.
     None,
 
@@ -165,7 +165,7 @@ pub enum FlipSettings {
     HorizontalVertical,
 }
 
-impl ExtractComponent for FlipSettings {
+impl ExtractComponent for Flip {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = FlipUniform;

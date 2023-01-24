@@ -18,7 +18,9 @@ use bevy::{
     },
 };
 
-use super::{DrawWithDynamicUniform, PostProcessingPhaseItem, UniformBindGroup, VfxOrdering};
+use crate::post_processing2::v3::DrawPostProcessingEffect;
+
+use super::{DrawPostProcessing, PostProcessingPhaseItem, UniformBindGroup, VfxOrdering};
 pub(crate) const MASK_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1059400090272595510);
 
@@ -62,29 +64,25 @@ impl bevy::prelude::Plugin for Plugin {
         load_internal_asset!(
             app,
             MASK_SHADER_HANDLE,
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/assets/shaders/",
-                "masks3.wgsl"
-            ),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "masks.wgsl"),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<MaskSettings>::default())
+        app.add_plugin(ExtractComponentPlugin::<Mask>::default())
             .add_plugin(UniformComponentPlugin::<MaskUniform>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<MaskSettings>,
+                super::extract_post_processing_camera_phases::<Mask>,
             )
             .init_resource::<MaskData>()
             .init_resource::<UniformBindGroup<MaskUniform>>()
             .init_resource::<SpecializedRenderPipelines<MaskData>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawWithDynamicUniform<MaskUniform>>();
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<MaskUniform>>();
     }
 }
 
@@ -109,7 +107,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<MaskSettings>,
+        &VfxOrdering<Mask>,
         &MaskVariant,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
@@ -117,7 +115,7 @@ fn prepare(
     for (entity, mut phase, order, key) in views.iter_mut() {
         let draw_function = draw_functions
             .read()
-            .id::<DrawWithDynamicUniform<MaskUniform>>();
+            .id::<DrawPostProcessingEffect<MaskUniform>>();
 
         let pipeline_id = pipelines.specialize(&pipeline_cache, &data, *key);
 
@@ -204,7 +202,7 @@ impl From<MaskVariant> for ShaderDefVal {
 
 /// TODO
 #[derive(Debug, Copy, Clone, Component)]
-pub struct MaskSettings {
+pub struct Mask {
     /// The strength parameter of the mask in use.
     ///
     /// See [`MaskVariant`] for guidelines on which range of values make sense
@@ -217,7 +215,7 @@ pub struct MaskSettings {
     pub variant: MaskVariant,
 }
 
-impl MaskSettings {
+impl Mask {
     /// Create a new square mask with a reasonable strength value.
     pub fn new_square() -> Self {
         Self {
@@ -243,7 +241,7 @@ impl MaskSettings {
     }
 }
 
-impl Default for MaskSettings {
+impl Default for Mask {
     fn default() -> Self {
         Self::new_vignette()
     }
@@ -255,15 +253,15 @@ pub struct MaskUniform {
     pub(crate) strength: f32,
 }
 
-impl From<MaskSettings> for MaskUniform {
-    fn from(mask: MaskSettings) -> Self {
+impl From<Mask> for MaskUniform {
+    fn from(mask: Mask) -> Self {
         Self {
             strength: mask.strength,
         }
     }
 }
 
-impl ExtractComponent for MaskSettings {
+impl ExtractComponent for Mask {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = (MaskUniform, MaskVariant);
