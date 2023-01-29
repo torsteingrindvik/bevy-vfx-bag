@@ -4,7 +4,7 @@ mod examples_common;
 use bevy::prelude::*;
 
 use bevy_vfx_bag::post_processing2::v3::{
-    blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, masks::Mask,
+    blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, lut::Lut, masks::Mask,
     pixelate::Pixelate, raindrops::Raindrops, wave::Wave, PostProcessingPlugin, VfxOrdering,
 };
 
@@ -21,7 +21,10 @@ fn main() {
 
 // TODO: PostProcessingBundle { effect, ordering }
 
-fn startup(mut commands: Commands) {
+fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let lut_handle: Handle<Image> = asset_server.load("luts/neo.png");
+    // let lut_handle: Handle<Image> = asset_server.load("luts/arctic.png");
+
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
@@ -46,6 +49,9 @@ fn startup(mut commands: Commands) {
         },
         Raindrops::default(),
         VfxOrdering::<Raindrops>::new(4.0),
+        Lut {
+            texture: lut_handle,
+        },
     ));
 }
 

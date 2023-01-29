@@ -25,7 +25,7 @@ pub(crate) use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
+use crate::post_processing2::v3::{DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
@@ -143,7 +143,9 @@ fn prepare(
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
-        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Raindrops>>();
+        let draw_function = draw_functions
+            .read()
+            .id::<DrawPostProcessingEffect<Raindrops>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,

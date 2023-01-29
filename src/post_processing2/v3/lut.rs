@@ -1,77 +1,154 @@
-use crate::{load_image, load_lut, shader_ref};
 use bevy::{
-    asset::LoadState,
-    ecs::query::QueryItem,
+    asset::load_internal_asset,
+    ecs::{
+        query::{QueryItem, ROQueryItem},
+        system::{lifetimeless::Read, SystemParamItem},
+    },
     prelude::*,
     reflect::TypeUuid,
     render::{
-        extract_component::ExtractComponent,
+        extract_component::{ExtractComponent, ExtractComponentPlugin},
+        render_asset::RenderAssets,
+        render_phase::{
+            AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
+            RenderPhase, SetItemPipeline, TrackedRenderPass,
+        },
         render_resource::{
-            AsBindGroup, Extent3d, ShaderRef, TextureDimension, TextureFormat,
+            BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
+            BindingResource, BindingType, CachedRenderPipelineId, Extent3d, SamplerBindingType,
+            ShaderStages, TextureDimension, TextureFormat, TextureSampleType,
             TextureViewDescriptor, TextureViewDimension,
         },
-        texture::ImageSampler,
+        renderer::RenderDevice,
+        RenderStage,
     },
-    sprite::Material2d,
-    utils::HashMap,
 };
 
-use super::post_processing_plugin;
-
-#[derive(Debug, Default)]
-struct IsFixed(bool);
-
-#[derive(Resource, Deref, DerefMut)]
-struct Handles(HashMap<LutVariant, (Handle<Image>, IsFixed)>);
+use super::{DrawPostProcessing, PostProcessingPhaseItem, SetTextureSamplerGlobals, VfxOrdering};
 
 pub(crate) const LUT_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10304902298789658536);
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3719875149378986812);
 
-pub(crate) struct Plugin;
+type DrawLut = (
+    // The pipeline must be set in order to use the correct bind group,
+    // access the correct shaders, and so on.
+    SetItemPipeline,
+    // Common to post processing items is that they all use the same
+    // first bind group, which has the input texture (the scene) and
+    // the sampler for that.
+    SetTextureSamplerGlobals<0>,
+    // Here we set the bind group for the effect.
+    SetLutImage<1>,
+    // Lastly we draw vertices.
+    // This is simple for a post processing effect, since we just draw
+    // a full screen triangle.
+    DrawPostProcessing,
+);
 
-impl bevy::prelude::Plugin for Plugin {
-    fn build(&self, app: &mut App) {
-        let handles = Handles(HashMap::from_iter(vec![
-            (LutVariant::Arctic, load_lut!(app, "luts/arctic.png", "png")),
-            (
-                LutVariant::Burlesque,
-                load_lut!(app, "luts/burlesque.png", "png"),
-            ),
-            (LutVariant::Denim, load_lut!(app, "luts/denim.png", "png")),
-            (LutVariant::Neo, load_lut!(app, "luts/neo.png", "png")),
-            (
-                LutVariant::Neutral,
-                load_lut!(app, "luts/neutral.png", "png"),
-            ),
-            (LutVariant::Rouge, load_lut!(app, "luts/rouge.png", "png")),
-            (LutVariant::Sauna, load_lut!(app, "luts/sauna.png", "png")),
-            (LutVariant::Slate, load_lut!(app, "luts/slate.png", "png")),
-        ]));
+#[derive(Debug, Component)]
+struct LutBindGroup {
+    bind_group: BindGroup,
+}
 
-        app.insert_resource(handles)
-            .add_system(fix_material)
-            .add_system(add_material)
-            .add_plugin(post_processing_plugin::Plugin::<Lut, LutSettings>::default());
+/// TODO
+struct SetLutImage<const I: usize>;
+impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetLutImage<I> {
+    type Param = ();
+    type ViewWorldQuery = ();
+    type ItemWorldQuery = Read<LutBindGroup>;
+
+    #[inline]
+    fn render<'w>(
+        _item: &P,
+        _view: (),
+        lut_bind_group: ROQueryItem<'w, Self::ItemWorldQuery>,
+        _param: SystemParamItem<'w, '_, Self::Param>,
+        pass: &mut TrackedRenderPass<'w>,
+    ) -> RenderCommandResult {
+        pass.set_bind_group(I, &lut_bind_group.bind_group, &[]);
+        RenderCommandResult::Success
     }
 }
 
-fn fix_material(
+#[derive(Resource)]
+pub(crate) struct LutData {
+    pub pipeline_id: CachedRenderPipelineId,
+    pub layout: BindGroupLayout,
+}
+
+impl FromWorld for LutData {
+    fn from_world(world: &mut World) -> Self {
+        let (layout, pipeline_id) = super::create_layout_and_pipeline(
+            world,
+            "LUT",
+            &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D3,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+            LUT_SHADER_HANDLE.typed(),
+        );
+
+        LutData {
+            pipeline_id,
+            layout,
+        }
+    }
+}
+
+pub(crate) struct Plugin;
+impl bevy::prelude::Plugin for Plugin {
+    fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            LUT_SHADER_HANDLE,
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "lut.wgsl"),
+            Shader::from_wgsl
+        );
+
+        // This puts the uniform into the render world.
+        app.add_plugin(ExtractComponentPlugin::<Lut>::default())
+            .add_system(adapt_image_for_lut_use);
+
+        super::render_app(app)
+            .add_system_to_stage(
+                RenderStage::Extract,
+                super::extract_post_processing_camera_phases::<Lut>,
+            )
+            .init_resource::<LutData>()
+            .add_system_to_stage(RenderStage::Prepare, prepare)
+            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_render_command::<PostProcessingPhaseItem, DrawLut>();
+    }
+}
+
+/// Marks a [`Lut`] as ready to be used.
+/// This means the [`Image`] has been adapted to be used as a LUT.
+#[derive(Debug, Component)]
+pub struct PreparedLut;
+
+fn adapt_image_for_lut_use(
+    mut commands: Commands,
     mut ev_asset: EventReader<AssetEvent<Image>>,
     mut assets: ResMut<Assets<Image>>,
-    mut handles: ResMut<Handles>,
-    mut materials: ResMut<Assets<Lut>>,
-    // handle: &Handle<Image>,
-    // assets: &mut Assets<Image>,
-    // materials: &mut Assets<Lut>,
-    // variant: &LutVariant,
+    luts: Query<(Entity, &Lut)>,
 ) {
     for ev in ev_asset.iter() {
         if let AssetEvent::Created { handle } = ev {
-            info!("Handle to asset created: {:?}", handle);
-            if let Some((variant, (handle, _))) = handles
-                .iter()
-                .find(|(_, (lut_handle, _))| lut_handle == handle)
-            {
+            if let Some((e, _)) = luts.iter().find(|(_, lut)| lut.texture == *handle) {
                 let image = assets
                     .get_mut(handle)
                     .expect("Handle should point to asset");
@@ -86,130 +163,90 @@ fn fix_material(
                 image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
 
                 image.texture_view_descriptor = Some(TextureViewDescriptor {
-                    label: Some("LUT TextureViewDescriptor"),
-                    format: Some(image.texture_descriptor.format),
+                    label: Some("LUT Texture View"),
+                    format: Some(TextureFormat::Rgba8Unorm),
                     dimension: Some(TextureViewDimension::D3),
                     ..default()
                 });
 
-                // The default sampler may change depending on the image plugin setup,
-                // so be explicit here.
-                image.sampler_descriptor = ImageSampler::linear();
-
-                // To avoid borrowing issues, we need to clone the handle and variant.
-                // let handle = handle.clone();
-                let variant = *variant;
-
-                handles
-                    .get_mut(&variant)
-                    .expect("LUT variant should exist")
-                    .1 = IsFixed(true);
-
-                for (_, _material) in materials.iter_mut() {
-                    // This mutable "access" is needed to trigger the usage of the new sampler.
-                    // TODO: I don't think we need this?
-                    // Since materials actually don't exist until added in `add_material`?
-                    debug!("Material is pointing to: {:?}", _material.lut);
-                }
+                commands.get_or_spawn(e).insert(PreparedLut);
             }
         }
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn add_material(
-    mut commands: Commands,
-    mut assets: ResMut<Assets<Lut>>,
-    asset_server: Res<AssetServer>,
-    handles: Res<Handles>,
-    cameras: Query<(Entity, &LutSettings), (With<Camera>, Without<Handle<Lut>>)>,
+fn prepare(
+    data: Res<LutData>,
+    mut views: Query<
+        (
+            Entity,
+            &mut RenderPhase<PostProcessingPhaseItem>,
+            &VfxOrdering<Lut>,
+        ),
+        With<PreparedLut>,
+    >,
+    draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
-    for (entity, settings) in cameras.iter() {
-        let (handle, is_fixed) = &handles
-            .get(&settings.variant)
-            .expect("Should not be able to provide invalid variant");
+    for (entity, mut phase, order) in views.iter_mut() {
+        let draw_function = draw_functions.read().id::<DrawLut>();
 
-        if !is_fixed.0 {
-            continue;
-        }
-
-        let state = asset_server.get_load_state(handle);
-
-        debug!("LUT state: {:?}", state);
-
-        if !matches!(state, LoadState::Loaded) {
-            continue;
-        }
-
-        let material_handle = assets.add(Lut {
-            lut: handle.clone(),
+        phase.add(PostProcessingPhaseItem {
+            entity,
+            sort_key: order.clone().into(),
+            draw_function,
+            pipeline_id: data.pipeline_id,
         });
-        commands.entity(entity).insert(material_handle);
+    }
+}
+
+fn queue(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>,
+    data: Res<LutData>,
+    images: Res<RenderAssets<Image>>,
+    luts: Query<(Entity, &Lut), With<PreparedLut>>,
+) {
+    for (entity, lut) in luts.iter() {
+        if let Some(lut_image) = images.get(&lut.texture) {
+            let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
+                label: Some("LUT Uniform Bind Group"),
+                layout: &data.layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&lut_image.texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&lut_image.sampler),
+                    },
+                ],
+            });
+
+            commands
+                .get_or_spawn(entity)
+                .insert(LutBindGroup { bind_group });
+        }
     }
 }
 
 /// TODO
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
-#[uuid = "de05b53e-7a14-11ed-89c7-e315bbf02c20"]
+#[derive(Debug, Component, Clone)]
 pub struct Lut {
-    // TODO, this works now, no need for high indices
-    #[texture(7, dimension = "3d")]
-    #[sampler(8)]
-    pub(crate) lut: Handle<Image>,
+    /// The 3D look-up texture
+    pub texture: Handle<Image>,
 }
 
-impl Material2d for Lut {
-    fn fragment_shader() -> ShaderRef {
-        shader_ref!(LUT_SHADER_HANDLE, "shaders/lut3.wgsl")
-    }
-}
+impl ExtractComponent for Lut {
+    type Query = (&'static Self, &'static Camera);
+    type Filter = With<PreparedLut>;
+    type Out = (Self, PreparedLut);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum LutVariant {
-    Arctic,
-    Burlesque,
-    Denim,
-    Neo,
-    Neutral,
-    Rouge,
-    Sauna,
-    Slate,
-}
+    fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        if !camera.is_active {
+            return None;
+        }
 
-/// TODO
-#[derive(Debug, Clone, Component)]
-pub struct LutSettings {
-    pub(crate) variant: LutVariant,
-}
-
-impl Default for LutSettings {
-    fn default() -> Self {
-        Self::new_arctic()
-    }
-}
-
-impl LutSettings {
-    pub(crate) fn new_variant(variant: LutVariant) -> Self {
-        Self { variant }
-    }
-
-    /// TODO
-    pub fn new_arctic() -> Self {
-        Self::new_variant(LutVariant::Arctic)
-    }
-
-    /// TODO
-    pub fn new_neutral() -> Self {
-        Self::new_variant(LutVariant::Neutral)
-    }
-}
-
-impl ExtractComponent for LutSettings {
-    type Query = &'static Self;
-    type Filter = ();
-    type Out = Self;
-
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        Some(item.clone())
+        Some((settings.clone(), PreparedLut))
     }
 }

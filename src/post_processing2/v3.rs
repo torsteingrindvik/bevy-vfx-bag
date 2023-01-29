@@ -48,8 +48,8 @@ pub mod chromatic_aberration;
 /// Flip
 pub mod flip;
 
-// LUT todo
-// pub mod lut;
+/// LUT
+pub mod lut;
 
 /// Masks
 pub mod masks;
@@ -145,7 +145,12 @@ pub(crate) fn render_pipeline_descriptor(
     shader: Handle<Shader>,
     shader_definitions: Vec<ShaderDefVal>,
 ) -> RenderPipelineDescriptor {
-    let mut shader_defs = vec![ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1)];
+    let mut shader_defs = vec![
+        // https://github.com/bevyengine/bevy/pull/6997
+        ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1),
+        // https://github.com/bevyengine/bevy/pull/7380
+        ShaderDefVal::Int("MAX_CASCADES_PER_LIGHT".to_string(), 1),
+    ];
 
     shader_defs.extend(shader_definitions);
 
@@ -586,7 +591,7 @@ impl Plugin for PostProcessingPlugin {
         app.add_plugin(blur::Plugin);
         app.add_plugin(chromatic_aberration::Plugin);
         app.add_plugin(flip::Plugin);
-        // app.add_plugin(lut::Plugin);
+        app.add_plugin(lut::Plugin);
         app.add_plugin(masks::Plugin);
         app.add_plugin(raindrops::Plugin);
         app.add_plugin(pixelate::Plugin);
