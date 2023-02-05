@@ -217,7 +217,7 @@ pub struct Mask {
 
 impl Mask {
     /// Create a new square mask with a reasonable strength value.
-    pub fn new_square() -> Self {
+    pub fn square() -> Self {
         Self {
             strength: 20.,
             variant: MaskVariant::Square,
@@ -225,7 +225,7 @@ impl Mask {
     }
 
     /// Create a new CRT mask with a reasonable strength value.
-    pub fn new_crt() -> Self {
+    pub fn crt() -> Self {
         Self {
             strength: 80000.,
             variant: MaskVariant::Crt,
@@ -233,7 +233,7 @@ impl Mask {
     }
 
     /// Create a new vignette mask with a reasonable strength value.
-    pub fn new_vignette() -> Self {
+    pub fn vignette() -> Self {
         Self {
             strength: 0.66,
             variant: MaskVariant::Vignette,
@@ -243,7 +243,7 @@ impl Mask {
 
 impl Default for Mask {
     fn default() -> Self {
-        Self::new_vignette()
+        Self::vignette()
     }
 }
 

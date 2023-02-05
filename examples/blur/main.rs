@@ -37,7 +37,7 @@ fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
         VfxOrdering::<ChromaticAberration>::new(2.0),
         Flip::Vertical,
         VfxOrdering::<Flip>::new(2.0),
-        Mask::new_vignette(),
+        Mask::vignette(),
         VfxOrdering::<Mask>::new(3.0),
         Wave {
             waves_x: 3.,

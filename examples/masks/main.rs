@@ -2,51 +2,50 @@
 mod examples_common;
 
 use bevy::prelude::*;
-
-use bevy_vfx_bag::{image::mask::*, BevyVfxBagPlugin, PostProcessingInput};
+use bevy_vfx_bag::post_processing::{
+    masks::{Mask, MaskVariant},
+    PostProcessingPlugin,
+};
 
 fn main() {
     let mut app = App::new();
 
-    // Set up the base example
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        // Add required plugin for using any effect at all
-        .add_plugin(BevyVfxBagPlugin)
-        // Add required resource for using masks
-        .insert_resource(Mask::new_vignette())
-        // Add required plugin for using masks
-        .add_plugin(MaskPlugin)
+        .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
-        // Shows how to change the effect at runtime
         .add_system(update)
         .run();
 }
 
 fn startup(mut commands: Commands) {
-    // Normal camera spawn
+    info!("Press [1|2|3] to change which mask is in use, [Up|Down] to change strenght, [L|H] to go low/high");
+
     commands
         .spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
         })
-        .insert(PostProcessingInput);
+        .insert(Mask::default());
 }
 
-fn update(
-    mut mask: ResMut<Mask>,
-    mut text: ResMut<examples_common::ExampleText>,
-    keyboard_input: Res<Input<KeyCode>>,
-) {
+fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<Camera>>) {
+    let mut mask = query.single_mut();
+
     // Let user change type of mask via 1, 2, 3
-    if keyboard_input.just_pressed(KeyCode::Key1) {
-        *mask = Mask::new_square();
+    let mut changed = if keyboard_input.just_pressed(KeyCode::Key1) {
+        *mask = Mask::square();
+        true
     } else if keyboard_input.just_pressed(KeyCode::Key2) {
-        *mask = Mask::new_crt();
+        *mask = Mask::crt();
+        true
     } else if keyboard_input.just_pressed(KeyCode::Key3) {
-        *mask = Mask::new_vignette();
-    }
+        *mask = Mask::vignette();
+        true
+    } else {
+        false
+    };
 
     // Let user change strength in increments via up, down arrows
     let increment = || match mask.variant {
@@ -55,9 +54,11 @@ fn update(
         MaskVariant::Vignette => 0.05,
     };
 
-    let increment = if keyboard_input.just_pressed(KeyCode::Up) {
+    let increment = if keyboard_input.pressed(KeyCode::Up) {
+        changed = true;
         increment()
-    } else if keyboard_input.just_pressed(KeyCode::Down) {
+    } else if keyboard_input.pressed(KeyCode::Down) {
+        changed = true;
         -increment()
     } else {
         0.0
@@ -79,15 +80,16 @@ fn update(
     };
 
     mask.strength = if keyboard_input.just_pressed(KeyCode::L) {
+        changed = true;
         low()
     } else if keyboard_input.just_pressed(KeyCode::H) {
+        changed = true;
         high()
     } else {
         mask.strength
     };
 
-    text.0 = format!(
-        "Effect (1,2,3): {:?}, strength (↑↓, [L]ow, [H]igh): {:.2}",
-        mask.variant, mask.strength
-    );
+    if changed {
+        info!("{:?}, strength: {:.2}", mask.variant, mask.strength);
+    }
 }
