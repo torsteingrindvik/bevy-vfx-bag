@@ -1,6 +1,4 @@
-use std::f32::consts::PI;
-
-pub(crate) use bevy::{
+use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
     prelude::*,
@@ -19,38 +17,38 @@ pub(crate) use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
+use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 
-pub(crate) const CHROMATIC_ABERRATION_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 4357337502039082134);
+pub(crate) const BLUR_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11044253213698850613);
 
 #[derive(Resource)]
-pub(crate) struct ChromaticAberrationData {
+pub(crate) struct BlurData {
     pub pipeline_id: CachedRenderPipelineId,
     pub uniform_layout: BindGroupLayout,
 }
 
-impl FromWorld for ChromaticAberrationData {
+impl FromWorld for BlurData {
     fn from_world(world: &mut World) -> Self {
         let (uniform_layout, pipeline_id) = super::create_layout_and_pipeline(
             world,
-            "ChromaticAberration",
+            "Blur",
             &[BindGroupLayoutEntry {
                 binding: 0,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(ChromaticAberration::min_size()),
+                    min_binding_size: Some(Blur::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
             }],
-            CHROMATIC_ABERRATION_SHADER_HANDLE.typed(),
+            BLUR_SHADER_HANDLE.typed(),
         );
 
-        ChromaticAberrationData {
+        BlurData {
             pipeline_id,
             uniform_layout,
         }
@@ -62,46 +60,39 @@ impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         load_internal_asset!(
             app,
-            CHROMATIC_ABERRATION_SHADER_HANDLE,
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/assets/shaders/",
-                "chromatic-aberration.wgsl"
-            ),
+            BLUR_SHADER_HANDLE,
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "blur.wgsl"),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<ChromaticAberration>::default())
-            .add_plugin(UniformComponentPlugin::<ChromaticAberration>::default());
+        app.add_plugin(ExtractComponentPlugin::<Blur>::default())
+            .add_plugin(UniformComponentPlugin::<Blur>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<ChromaticAberration>,
+                super::extract_post_processing_camera_phases::<Blur>,
             )
-            .init_resource::<ChromaticAberrationData>()
-            .init_resource::<UniformBindGroup<ChromaticAberration>>()
+            .init_resource::<BlurData>()
+            .init_resource::<UniformBindGroup<Blur>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<ChromaticAberration>>(
-            );
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Blur>>();
     }
 }
 
 fn prepare(
-    data: Res<ChromaticAberrationData>,
+    data: Res<BlurData>,
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<ChromaticAberration>,
+        &VfxOrdering<Blur>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
-        let draw_function = draw_functions
-            .read()
-            .id::<DrawPostProcessingEffect<ChromaticAberration>>();
+        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Blur>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -114,17 +105,17 @@ fn prepare(
 
 fn queue(
     render_device: Res<RenderDevice>,
-    data: Res<ChromaticAberrationData>,
-    mut bind_group: ResMut<UniformBindGroup<ChromaticAberration>>,
-    uniforms: Res<ComponentUniforms<ChromaticAberration>>,
-    views: Query<Entity, With<ChromaticAberration>>,
+    data: Res<BlurData>,
+    mut bind_group: ResMut<UniformBindGroup<Blur>>,
+    uniforms: Res<ComponentUniforms<Blur>>,
+    views: Query<Entity, With<Blur>>,
 ) {
     bind_group.inner = None;
 
     if let Some(uniforms) = uniforms.binding() {
         if !views.is_empty() {
             bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {
-                label: Some("ChromaticAberration Uniform Bind Group"),
+                label: Some("Blur Uniform Bind Group"),
                 layout: &data.uniform_layout,
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -135,47 +126,30 @@ fn queue(
     }
 }
 
-/// Chromatic Aberration settings.
+/// Blur settings.
 #[derive(Debug, Copy, Clone, Component, ShaderType)]
-pub struct ChromaticAberration {
-    /// The direction (in UV space) the red channel is offset in.
-    /// Will be normalized.
-    pub dir_r: Vec2,
+pub struct Blur {
+    /// How blurry the output image should be.
+    /// If `0.0`, no blur is applied.
+    /// `1.0` is "fully blurred", but higher values will produce interesting results.
+    pub amount: f32,
 
-    /// How far (in UV space) the red channel should be displaced.
-    pub magnitude_r: f32,
-
-    /// The direction (in UV space) the green channel is offset in.
-    /// Will be normalized.
-    pub dir_g: Vec2,
-
-    /// How far (in UV space) the green channel should be displaced.
-    pub magnitude_g: f32,
-
-    /// The direction (in UV space) the blue channel is offset in.
-    /// Will be normalized.
-    pub dir_b: Vec2,
-
-    /// How far (in UV space) the blue channel should be displaced.
-    pub magnitude_b: f32,
+    /// How far away the blur should sample points away from the origin point
+    /// when blurring.
+    /// This is in UV coordinates, so small (positive) values are expected (`0.01` is a good start).
+    pub kernel_radius: f32,
 }
 
-impl Default for ChromaticAberration {
+impl Default for Blur {
     fn default() -> Self {
-        let one_third = (2. / 3.) * PI;
-
         Self {
-            dir_r: Vec2::from_angle(0. * one_third),
-            magnitude_r: 0.01,
-            dir_g: Vec2::from_angle(1. * one_third),
-            magnitude_g: 0.01,
-            dir_b: Vec2::from_angle(2. * one_third),
-            magnitude_b: 0.01,
+            amount: 0.5,
+            kernel_radius: 0.01,
         }
     }
 }
 
-impl ExtractComponent for ChromaticAberration {
+impl ExtractComponent for Blur {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;

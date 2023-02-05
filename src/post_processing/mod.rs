@@ -37,7 +37,7 @@ use bevy::{
     utils::{FloatOrd, HashMap},
 };
 
-use super::util;
+// use super::util;
 
 /// Blur
 pub mod blur;
@@ -78,6 +78,23 @@ where
             inner: None,
             marker: PhantomData,
         }
+    }
+}
+
+/// Adds a `.order` helper method to a component.
+/// When used on a post processing effect, it determines the order in which the effect is applied.
+/// See [`VfxOrdering`] for more information.
+pub trait PostProcessingOrder: Sized {
+    /// Adds an ordering to the component.
+    fn with_order(self, order: f32) -> (Self, VfxOrdering<Self>);
+}
+
+impl<U> PostProcessingOrder for U
+where
+    U: Component,
+{
+    fn with_order(self, order: f32) -> (Self, VfxOrdering<Self>) {
+        (self, VfxOrdering::new(order))
     }
 }
 
@@ -143,17 +160,8 @@ pub(crate) fn render_pipeline_descriptor(
     shared_layout: &BindGroupLayout,
     uniform_layout: &BindGroupLayout,
     shader: Handle<Shader>,
-    shader_definitions: Vec<ShaderDefVal>,
+    shader_defs: Vec<ShaderDefVal>,
 ) -> RenderPipelineDescriptor {
-    let mut shader_defs = vec![
-        // https://github.com/bevyengine/bevy/pull/6997
-        ShaderDefVal::Int("MAX_DIRECTIONAL_LIGHTS".to_string(), 1),
-        // https://github.com/bevyengine/bevy/pull/7380
-        ShaderDefVal::Int("MAX_CASCADES_PER_LIGHT".to_string(), 1),
-    ];
-
-    shader_defs.extend(shader_definitions);
-
     RenderPipelineDescriptor {
         label: Some(format!("{label} Render Pipeline").into()),
         layout: Some(vec![shared_layout.clone(), uniform_layout.clone()]),
@@ -575,7 +583,11 @@ impl Plugin for PostProcessingPlugin {
             .expect("Need a render app for post processing");
 
         // All effects share this node.
-        util::add_nodes::<PostProcessingNode>(render_app, "PostProcessing2d", "PostProcessing3d");
+        crate::util::add_nodes::<PostProcessingNode>(
+            render_app,
+            "PostProcessing2d",
+            "PostProcessing3d",
+        );
 
         render_app
             .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()

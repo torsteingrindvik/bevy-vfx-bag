@@ -20,6 +20,7 @@ use bevy::{
             TextureViewDescriptor, TextureViewDimension,
         },
         renderer::RenderDevice,
+        texture::{CompressedImageFormats, ImageType},
         RenderStage,
     },
 };
@@ -28,6 +29,9 @@ use super::{DrawPostProcessing, PostProcessingPhaseItem, SetTextureSamplerGlobal
 
 pub(crate) const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3719875149378986812);
+
+const LUT_DEFAULT_IMAGE_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 18411885151390434307);
 
 type DrawLut = (
     // The pipeline must be set in order to use the correct bind group,
@@ -118,6 +122,20 @@ impl bevy::prelude::Plugin for Plugin {
             concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "lut.wgsl"),
             Shader::from_wgsl
         );
+
+        let image = Image::from_buffer(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/luts/",
+                "neo.png"
+            )),
+            ImageType::Extension("png"),
+            CompressedImageFormats::NONE,
+            false,
+        )
+        .expect("Should load default LUT successfully");
+        let mut assets = app.world.resource_mut::<Assets<_>>();
+        assets.set_untracked(LUT_DEFAULT_IMAGE_HANDLE, image);
 
         // This puts the uniform into the render world.
         app.add_plugin(ExtractComponentPlugin::<Lut>::default())
@@ -235,6 +253,14 @@ fn queue(
 pub struct Lut {
     /// The 3D look-up texture
     pub texture: Handle<Image>,
+}
+
+impl Default for Lut {
+    fn default() -> Self {
+        Self {
+            texture: LUT_DEFAULT_IMAGE_HANDLE.typed(),
+        }
+    }
 }
 
 impl ExtractComponent for Lut {

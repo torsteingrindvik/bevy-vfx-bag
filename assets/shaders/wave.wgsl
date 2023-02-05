@@ -1,8 +1,6 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_pbr::mesh_view_types
-// #import bevy_pbr::utils
-// https://github.com/bevyengine/bevy/issues/7353
-let PI: f32 = 3.141592653589793;
+#import bevy_pbr::globals
+#import bevy_pbr::utils
 
 @group(0) @binding(0)
 var source: texture_2d<f32>;

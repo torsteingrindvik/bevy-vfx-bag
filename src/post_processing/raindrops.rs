@@ -1,6 +1,7 @@
 use bevy::render::{
     extract_resource::{ExtractResource, ExtractResourcePlugin},
     render_asset::RenderAssets,
+    render_phase::AddRenderCommand,
     render_resource::{
         AddressMode, BindingResource, Sampler, SamplerBindingType, SamplerDescriptor,
         TextureSampleType, TextureViewDimension,
@@ -15,7 +16,7 @@ pub(crate) use bevy::{
         extract_component::{
             ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
         },
-        render_phase::{AddRenderCommand, DrawFunctions, RenderPhase},
+        render_phase::{DrawFunctions, RenderPhase},
         render_resource::{
             BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
@@ -25,7 +26,7 @@ pub(crate) use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawPostProcessingEffect, UniformBindGroup};
+use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 

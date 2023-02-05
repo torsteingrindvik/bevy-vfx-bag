@@ -3,7 +3,7 @@ mod examples_common;
 
 use bevy::prelude::*;
 
-use bevy_vfx_bag::post_processing2::v3::{pixelate::Pixelate, PostProcessingPlugin};
+use bevy_vfx_bag::post_processing::{pixelate::Pixelate, PostProcessingPlugin};
 
 fn main() {
     let mut app = App::new();
@@ -17,6 +17,8 @@ fn main() {
 }
 
 fn startup(mut commands: Commands) {
+    info!("Press [t] to toggle, [up/down] to change");
+
     commands.spawn((
         Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
@@ -28,27 +30,32 @@ fn startup(mut commands: Commands) {
 }
 
 fn update(
+    mut saved_settings: Local<Pixelate>,
+    mut commands: Commands,
     keyboard_input: Res<Input<KeyCode>>,
-    mut pixelate: Query<&Pixelate>,
-    // mut text: ResMut<examples_common::ExampleText>,
+    mut query: Query<(Entity, Option<&mut Pixelate>), With<Camera>>,
 ) {
-    let mut pixelate_diff = 0.0;
-
-    if keyboard_input.just_pressed(KeyCode::P) {
-        // passthrough.0 = !passthrough.0;
+    if keyboard_input.just_pressed(KeyCode::T) {
+        match query.single() {
+            (entity, None) => {
+                info!("Toggling ON");
+                commands.get_or_spawn(entity).insert(*saved_settings);
+            }
+            (entity, Some(settings)) => {
+                info!("Toggling OFF");
+                commands.get_or_spawn(entity).remove::<Pixelate>();
+                *saved_settings = *settings;
+            }
+        };
     }
 
-    if keyboard_input.just_pressed(KeyCode::Up) {
-        pixelate_diff = 1.0;
-    } else if keyboard_input.just_pressed(KeyCode::Down) {
-        pixelate_diff = -1.0;
+    if let (_, Some(mut settings)) = query.single_mut() {
+        if keyboard_input.just_pressed(KeyCode::Up) {
+            settings.block_size += 1.0;
+            info!("Block size now: {}", settings.block_size);
+        } else if keyboard_input.just_pressed(KeyCode::Down) {
+            settings.block_size -= 1.0;
+            info!("Block size now: {}", settings.block_size);
+        };
     }
-
-    // pixelate.block_size += pixelate_diff;
-    // pixelate.block_size = 1.0_f32.max(pixelate.block_size);
-
-    // text.0 = format!(
-    //     "Pixelate block size (↑↓): {:.2?}, [P]assthrough: {:?}",
-    //     pixelate.block_size, passthrough.0
-    // );
 }

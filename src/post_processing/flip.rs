@@ -17,7 +17,7 @@ use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawPostProcessing, DrawPostProcessingEffect, UniformBindGroup};
+use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
 use super::{PostProcessingPhaseItem, VfxOrdering};
 

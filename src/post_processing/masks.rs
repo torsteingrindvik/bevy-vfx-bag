@@ -18,9 +18,9 @@ use bevy::{
     },
 };
 
-use crate::post_processing2::v3::DrawPostProcessingEffect;
+use crate::post_processing::DrawPostProcessingEffect;
 
-use super::{DrawPostProcessing, PostProcessingPhaseItem, UniformBindGroup, VfxOrdering};
+use super::{PostProcessingPhaseItem, UniformBindGroup, VfxOrdering};
 pub(crate) const MASK_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1059400090272595510);
 

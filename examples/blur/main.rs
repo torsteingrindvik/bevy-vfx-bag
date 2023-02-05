@@ -3,7 +3,7 @@ mod examples_common;
 
 use bevy::prelude::*;
 
-use bevy_vfx_bag::post_processing2::v3::{
+use bevy_vfx_bag::post_processing::{
     blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, lut::Lut, masks::Mask,
     pixelate::Pixelate, raindrops::Raindrops, wave::Wave, PostProcessingPlugin, VfxOrdering,
 };

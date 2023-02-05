@@ -1,5 +1,5 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_pbr::mesh_view_types
+#import bevy_pbr::globals
 
 @group(0) @binding(0)
 var t: texture_2d<f32>;

@@ -1,4 +1,4 @@
-use bevy::{
+pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
     prelude::*,
@@ -17,38 +17,66 @@ use bevy::{
     },
 };
 
-use crate::post_processing2::v3::{DrawPostProcessingEffect, UniformBindGroup};
+use crate::post_processing::UniformBindGroup;
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{DrawPostProcessingEffect, PostProcessingPhaseItem, VfxOrdering};
 
-pub(crate) const BLUR_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11044253213698850613);
+const WAVE_SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1792660281364049744);
+
+/// Wave parameters.
+///
+/// Note that the parameters for the X axis causes a wave effect
+/// towards the left- and right sides of the screen.
+/// For example, if we have 1 wave in the X axis,
+/// we will have one part of the screen stretched towards the right
+/// horizontally, and one part stretched towards the left.
+#[derive(Default, Debug, Copy, Clone, Component, ShaderType)]
+pub struct Wave {
+    /// How many waves in the x axis.
+    pub waves_x: f32,
+
+    /// How many waves in the y axis.
+    pub waves_y: f32,
+
+    /// How fast the x axis waves oscillate.
+    pub speed_x: f32,
+
+    /// How fast the y axis waves oscillate.
+    pub speed_y: f32,
+
+    /// How much displacement the x axis waves cause.
+    pub amplitude_x: f32,
+
+    /// How much displacement the y axis waves cause.
+    pub amplitude_y: f32,
+}
 
 #[derive(Resource)]
-pub(crate) struct BlurData {
+pub(crate) struct WaveData {
     pub pipeline_id: CachedRenderPipelineId,
     pub uniform_layout: BindGroupLayout,
 }
 
-impl FromWorld for BlurData {
+impl FromWorld for WaveData {
     fn from_world(world: &mut World) -> Self {
         let (uniform_layout, pipeline_id) = super::create_layout_and_pipeline(
             world,
-            "Blur",
+            "Wave",
             &[BindGroupLayoutEntry {
                 binding: 0,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: Some(Blur::min_size()),
+                    min_binding_size: Some(Wave::min_size()),
                 },
                 visibility: ShaderStages::FRAGMENT,
                 count: None,
             }],
-            BLUR_SHADER_HANDLE.typed(),
+            WAVE_SHADER_HANDLE.typed(),
         );
 
-        BlurData {
+        WaveData {
             pipeline_id,
             uniform_layout,
         }
@@ -60,39 +88,39 @@ impl bevy::prelude::Plugin for Plugin {
     fn build(&self, app: &mut App) {
         load_internal_asset!(
             app,
-            BLUR_SHADER_HANDLE,
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "blur.wgsl"),
+            WAVE_SHADER_HANDLE,
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/shaders/", "wave.wgsl"),
             Shader::from_wgsl
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Blur>::default())
-            .add_plugin(UniformComponentPlugin::<Blur>::default());
+        app.add_plugin(ExtractComponentPlugin::<Wave>::default())
+            .add_plugin(UniformComponentPlugin::<Wave>::default());
 
         super::render_app(app)
             .add_system_to_stage(
                 RenderStage::Extract,
-                super::extract_post_processing_camera_phases::<Blur>,
+                super::extract_post_processing_camera_phases::<Wave>,
             )
-            .init_resource::<BlurData>()
-            .init_resource::<UniformBindGroup<Blur>>()
+            .init_resource::<WaveData>()
+            .init_resource::<UniformBindGroup<Wave>>()
             .add_system_to_stage(RenderStage::Prepare, prepare)
             .add_system_to_stage(RenderStage::Queue, queue)
-            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Blur>>();
+            .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Wave>>();
     }
 }
 
 fn prepare(
-    data: Res<BlurData>,
+    data: Res<WaveData>,
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Blur>,
+        &VfxOrdering<Wave>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
     for (entity, mut phase, order) in views.iter_mut() {
-        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Blur>>();
+        let draw_function = draw_functions.read().id::<DrawPostProcessingEffect<Wave>>();
 
         phase.add(PostProcessingPhaseItem {
             entity,
@@ -105,17 +133,17 @@ fn prepare(
 
 fn queue(
     render_device: Res<RenderDevice>,
-    data: Res<BlurData>,
-    mut bind_group: ResMut<UniformBindGroup<Blur>>,
-    uniforms: Res<ComponentUniforms<Blur>>,
-    views: Query<Entity, With<Blur>>,
+    data: Res<WaveData>,
+    mut bind_group: ResMut<UniformBindGroup<Wave>>,
+    uniforms: Res<ComponentUniforms<Wave>>,
+    views: Query<Entity, With<Wave>>,
 ) {
     bind_group.inner = None;
 
     if let Some(uniforms) = uniforms.binding() {
         if !views.is_empty() {
             bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {
-                label: Some("Blur Uniform Bind Group"),
+                label: Some("Wave Uniform Bind Group"),
                 layout: &data.uniform_layout,
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -126,30 +154,7 @@ fn queue(
     }
 }
 
-/// Blur settings.
-#[derive(Debug, Copy, Clone, Component, ShaderType)]
-pub struct Blur {
-    /// How blurry the output image should be.
-    /// If `0.0`, no blur is applied.
-    /// `1.0` is "fully blurred", but higher values will produce interesting results.
-    pub amount: f32,
-
-    /// How far away the blur should sample points away from the origin point
-    /// when blurring.
-    /// This is in UV coordinates, so small (positive) values are expected (`0.01` is a good start).
-    pub kernel_radius: f32,
-}
-
-impl Default for Blur {
-    fn default() -> Self {
-        Self {
-            amount: 0.5,
-            kernel_radius: 0.01,
-        }
-    }
-}
-
-impl ExtractComponent for Blur {
+impl ExtractComponent for Wave {
     type Query = (&'static Self, &'static Camera);
     type Filter = ();
     type Out = Self;
