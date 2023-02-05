@@ -569,6 +569,7 @@ impl<C> VfxOrdering<C> {
 }
 
 /// TODO
+#[derive(Debug, Default)]
 pub struct PostProcessingPlugin {}
 
 pub(crate) fn render_app(app: &mut App) -> &mut App {
