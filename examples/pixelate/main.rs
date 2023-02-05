@@ -1,3 +1,6 @@
+//! This example shows the pixelation effect as well as
+//! how to toggle a post processing effect at runtime.
+//! All post processing effects may be toggled as such.
 #[path = "../examples_common.rs"]
 mod examples_common;
 

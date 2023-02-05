@@ -30,8 +30,12 @@ use super::{DrawPostProcessing, PostProcessingPhaseItem, SetTextureSamplerGlobal
 pub(crate) const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3719875149378986812);
 
-const LUT_DEFAULT_IMAGE_HANDLE: HandleUntyped =
+const LUT_ARCTIC_IMAGE_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 11514769687270273032);
+const LUT_NEO_IMAGE_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Image::TYPE_UUID, 18411885151390434307);
+const LUT_SLATE_IMAGE_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 8809687374954616573);
 
 type DrawLut = (
     // The pipeline must be set in order to use the correct bind group,
@@ -123,6 +127,8 @@ impl bevy::prelude::Plugin for Plugin {
             Shader::from_wgsl
         );
 
+        let mut assets = app.world.resource_mut::<Assets<_>>();
+
         let image = Image::from_buffer(
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -133,9 +139,34 @@ impl bevy::prelude::Plugin for Plugin {
             CompressedImageFormats::NONE,
             false,
         )
-        .expect("Should load default LUT successfully");
-        let mut assets = app.world.resource_mut::<Assets<_>>();
-        assets.set_untracked(LUT_DEFAULT_IMAGE_HANDLE, image);
+        .expect("Should load LUT successfully");
+        assets.set_untracked(LUT_NEO_IMAGE_HANDLE, image);
+
+        let image = Image::from_buffer(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/luts/",
+                "slate.png"
+            )),
+            ImageType::Extension("png"),
+            CompressedImageFormats::NONE,
+            false,
+        )
+        .expect("Should load LUT successfully");
+        assets.set_untracked(LUT_SLATE_IMAGE_HANDLE, image);
+
+        let image = Image::from_buffer(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/luts/",
+                "arctic.png"
+            )),
+            ImageType::Extension("png"),
+            CompressedImageFormats::NONE,
+            false,
+        )
+        .expect("Should load LUT successfully");
+        assets.set_untracked(LUT_ARCTIC_IMAGE_HANDLE, image);
 
         // This puts the uniform into the render world.
         app.add_plugin(ExtractComponentPlugin::<Lut>::default())
@@ -158,6 +189,10 @@ impl bevy::prelude::Plugin for Plugin {
 #[derive(Debug, Component)]
 pub struct PreparedLut;
 
+// TODO: If the LUT changes at runtime, the entity will _still_ have PreparedLut, but the underlying
+// handle points to something without modified image.
+//
+// Will need to fix this to instead look at Changed<Lut> (?), remove PreparedLut, then... something.
 fn adapt_image_for_lut_use(
     mut commands: Commands,
     mut ev_asset: EventReader<AssetEvent<Image>>,
@@ -187,6 +222,7 @@ fn adapt_image_for_lut_use(
                     ..default()
                 });
 
+                info!("LUT prepared for handle {:?}", *handle);
                 commands.get_or_spawn(e).insert(PreparedLut);
             }
         }
@@ -255,10 +291,31 @@ pub struct Lut {
     pub texture: Handle<Image>,
 }
 
+impl Lut {
+    /// The arctic color scheme LUT.
+    pub fn arctic() -> Self {
+        Self {
+            texture: LUT_ARCTIC_IMAGE_HANDLE.typed_weak(),
+        }
+    }
+
+    /// The neo color scheme LUT.
+    pub fn neo() -> Self {
+        Self::default()
+    }
+
+    /// The slate color scheme LUT.
+    pub fn slate() -> Self {
+        Self {
+            texture: LUT_SLATE_IMAGE_HANDLE.typed_weak(),
+        }
+    }
+}
+
 impl Default for Lut {
     fn default() -> Self {
         Self {
-            texture: LUT_DEFAULT_IMAGE_HANDLE.typed(),
+            texture: LUT_NEO_IMAGE_HANDLE.typed(),
         }
     }
 }

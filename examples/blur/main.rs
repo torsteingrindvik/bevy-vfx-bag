@@ -13,13 +13,11 @@ fn main() {
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(PostProcessingPlugin {})
+        .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
         .add_system(update)
         .run();
 }
-
-// TODO: PostProcessingBundle { effect, ordering }
 
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let lut_handle: Handle<Image> = asset_server.load("luts/neo.png");
