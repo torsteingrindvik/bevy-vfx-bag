@@ -33,7 +33,6 @@ fn startup(mut commands: Commands) {
 fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<Camera>>) {
     let mut mask = query.single_mut();
 
-    // Let user change type of mask via 1, 2, 3
     let mut changed = if keyboard_input.just_pressed(KeyCode::Key1) {
         *mask = Mask::square();
         true
