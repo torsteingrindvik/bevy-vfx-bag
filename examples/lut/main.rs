@@ -16,6 +16,8 @@ fn main() {
 }
 
 fn startup(mut commands: Commands) {
+    info!("Press [left|right] to change which LUT is in use");
+
     commands
         .spawn(Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
@@ -47,19 +49,19 @@ fn update(
         match *choice {
             0 => {
                 commands.get_or_spawn(entity).insert(Lut::neo());
-                info!("LUT: Neo");
+                info!("Neo");
             }
             1 => {
                 commands.get_or_spawn(entity).insert(Lut::arctic());
-                info!("LUT: Arctic");
+                info!("Arctic");
             }
             2 => {
                 commands.get_or_spawn(entity).insert(Lut::slate());
-                info!("LUT: Slate");
+                info!("Slate");
             }
             3 => {
                 commands.get_or_spawn(entity).remove::<Lut>();
-                info!("LUT: Disabled (default Bevy colors)");
+                info!("Disabled (default Bevy colors)");
             }
             _ => unreachable!(),
         }

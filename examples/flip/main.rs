@@ -1,7 +1,7 @@
 #[path = "../examples_common.rs"]
 mod examples_common;
 
-use bevy::{prelude::*, time::FixedTimestep};
+use bevy::prelude::*;
 use bevy_vfx_bag::post_processing::{flip::Flip, PostProcessingPlugin};
 
 fn main() {
@@ -11,24 +11,22 @@ fn main() {
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
-        .add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(1.0))
-                .with_system(update),
-        )
+        .add_system_to_schedule(CoreSchedule::FixedUpdate, update)
+        .insert_resource(FixedTime::new_from_secs(1.5))
         .run();
 }
 
 fn startup(mut commands: Commands) {
     info!("Flips the screen orientation every second.");
 
-    commands
-        .spawn(Camera3dBundle {
+    commands.spawn((
+        Camera3dBundle {
             transform: Transform::from_xyz(0.0, 6., 12.0)
                 .looking_at(Vec3::new(0., 1., 0.), Vec3::Y),
             ..default()
-        })
-        .insert(Flip::default());
+        },
+        Flip::default(),
+    ));
 }
 
 // Switch flip modes every second.
