@@ -170,7 +170,7 @@ impl bevy::prelude::Plugin for Plugin {
 
         // This puts the uniform into the render world.
         app.add_plugin(ExtractComponentPlugin::<Lut>::default())
-            .add_system(adapt_image_for_lut_use);
+            .add_system(adapt_image_for_lut_use.in_base_set(CoreSet::PostUpdate));
 
         super::render_app(app)
             .add_system_to_schedule(
@@ -184,55 +184,38 @@ impl bevy::prelude::Plugin for Plugin {
     }
 }
 
-/// Marks a [`Lut`] as ready to be used.
-/// This means the [`Image`] has been adapted to be used as a LUT.
-#[derive(Debug, Component)]
-pub struct PreparedLut;
-
-// fn adapt_image_for_lut_use(
-//     mut commands: Commands,
-//     mut luts: Query<(Entity,  PreparedLut, Changed<mut Lut>)>,
-// ) {
-//     for lut in luts {}
-// }
-
-// TODO: If the LUT changes at runtime, the entity will _still_ have PreparedLut, but the underlying
-// handle points to something without modified image.
-//
-// Will need to fix this to instead look at Changed<Lut> (?), remove PreparedLut, then... something.
 fn adapt_image_for_lut_use(
     mut commands: Commands,
-    mut ev_asset: EventReader<AssetEvent<Image>>,
     mut assets: ResMut<Assets<Image>>,
-    luts: Query<(Entity, &Lut, Changed<Lut>)>,
+    mut luts: Query<&mut Lut, Changed<Lut>>,
 ) {
-    for ev in ev_asset.iter() {
-        if let AssetEvent::Created { handle } = ev {
-            if let Some((e, _, _)) = luts.iter().find(|(_, lut, _)| lut.texture == *handle) {
-                let image = assets
-                    .get_mut(handle)
-                    .expect("Handle should point to asset");
-
-                // The LUT is a 3d texture. It has 64 layers, each of which is a 64x64 image.
-                image.texture_descriptor.size = Extent3d {
-                    width: 64,
-                    height: 64,
-                    depth_or_array_layers: 64,
-                };
-                image.texture_descriptor.dimension = TextureDimension::D3;
-                image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
-
-                image.texture_view_descriptor = Some(TextureViewDescriptor {
-                    label: Some("LUT Texture View"),
-                    format: Some(TextureFormat::Rgba8Unorm),
-                    dimension: Some(TextureViewDimension::D3),
-                    ..default()
-                });
-
-                info!("LUT prepared for handle {:?}", *handle);
-                commands.get_or_spawn(e).insert(PreparedLut);
-            }
+    for mut lut in luts.iter_mut() {
+        if lut.prepared {
+            continue;
         }
+
+        let image = assets
+            .get_mut(&lut.texture)
+            .expect("Handle should point to asset");
+
+        // The LUT is a 3d texture. It has 64 layers, each of which is a 64x64 image.
+        image.texture_descriptor.size = Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 64,
+        };
+        image.texture_descriptor.dimension = TextureDimension::D3;
+        image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+
+        image.texture_view_descriptor = Some(TextureViewDescriptor {
+            label: Some("LUT Texture View"),
+            format: Some(TextureFormat::Rgba8Unorm),
+            dimension: Some(TextureViewDimension::D3),
+            ..default()
+        });
+
+        debug!("LUT prepared for handle {:?}", lut.texture);
+        lut.prepared = true;
     }
 }
 
@@ -244,7 +227,7 @@ fn prepare(
             &mut RenderPhase<PostProcessingPhaseItem>,
             &VfxOrdering<Lut>,
         ),
-        With<PreparedLut>,
+        With<Lut>,
     >,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
@@ -265,7 +248,7 @@ fn queue(
     render_device: Res<RenderDevice>,
     data: Res<LutData>,
     images: Res<RenderAssets<Image>>,
-    luts: Query<(Entity, &Lut), With<PreparedLut>>,
+    luts: Query<(Entity, &Lut)>,
 ) {
     for (entity, lut) in luts.iter() {
         if let Some(lut_image) = images.get(&lut.texture) {
@@ -295,15 +278,25 @@ fn queue(
 #[derive(Debug, Component, Clone)]
 pub struct Lut {
     /// The 3D look-up texture
-    pub texture: Handle<Image>,
+    texture: Handle<Image>,
+
+    prepared: bool,
 }
 
 impl Lut {
+    /// Creates a new LUT component.
+    /// The image should be a 64x64x64 3D texture.
+    /// See the `make-neutral-lut` example.
+    pub fn new(texture: Handle<Image>) -> Self {
+        Self {
+            texture,
+            prepared: false,
+        }
+    }
+
     /// The arctic color scheme LUT.
     pub fn arctic() -> Self {
-        Self {
-            texture: LUT_ARCTIC_IMAGE_HANDLE.typed_weak(),
-        }
+        Self::new(LUT_ARCTIC_IMAGE_HANDLE.typed_weak())
     }
 
     /// The neo color scheme LUT.
@@ -313,30 +306,26 @@ impl Lut {
 
     /// The slate color scheme LUT.
     pub fn slate() -> Self {
-        Self {
-            texture: LUT_SLATE_IMAGE_HANDLE.typed_weak(),
-        }
+        Self::new(LUT_SLATE_IMAGE_HANDLE.typed_weak())
     }
 }
 
 impl Default for Lut {
     fn default() -> Self {
-        Self {
-            texture: LUT_NEO_IMAGE_HANDLE.typed(),
-        }
+        Self::new(LUT_NEO_IMAGE_HANDLE.typed_weak())
     }
 }
 
 impl ExtractComponent for Lut {
     type Query = (&'static Self, &'static Camera);
-    type Filter = With<PreparedLut>;
-    type Out = (Self, PreparedLut);
+    type Filter = ();
+    type Out = Self;
 
-    fn extract_component((settings, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
-        if !camera.is_active {
+    fn extract_component((lut, camera): QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+        if !camera.is_active || !lut.prepared {
             return None;
         }
 
-        Some((settings.clone(), PreparedLut))
+        Some(lut.clone())
     }
 }
