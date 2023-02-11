@@ -15,6 +15,7 @@ fn main() {
         .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
         .add_system(update)
+        .add_system(examples_common::print_on_change::<Mask>)
         .run();
 }
 
@@ -33,17 +34,12 @@ fn startup(mut commands: Commands) {
 fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<Camera>>) {
     let mut mask = query.single_mut();
 
-    let mut changed = if keyboard_input.just_pressed(KeyCode::Key1) {
+    if keyboard_input.just_pressed(KeyCode::Key1) {
         *mask = Mask::square();
-        true
     } else if keyboard_input.just_pressed(KeyCode::Key2) {
         *mask = Mask::crt();
-        true
     } else if keyboard_input.just_pressed(KeyCode::Key3) {
         *mask = Mask::vignette();
-        true
-    } else {
-        false
     };
 
     // Let user change strength in increments via up, down arrows
@@ -53,17 +49,11 @@ fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<
         MaskVariant::Vignette => 0.05,
     };
 
-    let increment = if keyboard_input.pressed(KeyCode::Up) {
-        changed = true;
-        increment()
+    if keyboard_input.pressed(KeyCode::Up) {
+        mask.strength += increment();
     } else if keyboard_input.pressed(KeyCode::Down) {
-        changed = true;
-        -increment()
-    } else {
-        0.0
+        mask.strength -= increment();
     };
-
-    mask.strength += increment;
 
     // Let user go to low- and high strength values directly via L and H keys
     let low = || match mask.variant {
@@ -78,17 +68,9 @@ fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<
         MaskVariant::Vignette => 1.5,
     };
 
-    mask.strength = if keyboard_input.just_pressed(KeyCode::L) {
-        changed = true;
-        low()
+    if keyboard_input.just_pressed(KeyCode::L) {
+        mask.strength = low();
     } else if keyboard_input.just_pressed(KeyCode::H) {
-        changed = true;
-        high()
-    } else {
-        mask.strength
+        mask.strength = high();
     };
-
-    if changed {
-        info!("{:?}, strength: {:.2}", mask.variant, mask.strength);
-    }
 }

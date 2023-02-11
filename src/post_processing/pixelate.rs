@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bevy::render::RenderSet;
 pub(crate) use bevy::{
     asset::load_internal_asset,
@@ -142,6 +144,12 @@ pub struct Pixelate {
 impl Default for Pixelate {
     fn default() -> Self {
         Self { block_size: 8.0 }
+    }
+}
+
+impl Display for Pixelate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pixelate block size: {}", self.block_size)
     }
 }
 

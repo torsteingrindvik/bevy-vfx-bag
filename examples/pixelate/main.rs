@@ -14,6 +14,7 @@ fn main() {
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
+        .add_system(examples_common::print_on_change::<Pixelate>)
         .add_system(update)
         .run();
 }
@@ -54,10 +55,8 @@ fn update(
     if let (_, Some(mut settings)) = query.single_mut() {
         if keyboard_input.just_pressed(KeyCode::Up) {
             settings.block_size += 1.0;
-            info!("Block size now: {}", settings.block_size);
         } else if keyboard_input.just_pressed(KeyCode::Down) {
             settings.block_size -= 1.0;
-            info!("Block size now: {}", settings.block_size);
         };
     }
 }

@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, fmt::Display};
 
 use bevy::render::RenderSet;
 pub(crate) use bevy::{
@@ -160,6 +160,15 @@ pub struct ChromaticAberration {
     pub magnitude_b: f32,
 }
 
+impl ChromaticAberration {
+    /// Adds the given diff to the magnitude of all color channels.
+    pub fn add_magnitude(&mut self, diff: f32) {
+        self.magnitude_r += diff;
+        self.magnitude_g += diff;
+        self.magnitude_b += diff;
+    }
+}
+
 impl Default for ChromaticAberration {
     fn default() -> Self {
         let one_third = (2. / 3.) * PI;
@@ -172,6 +181,24 @@ impl Default for ChromaticAberration {
             dir_b: Vec2::from_angle(2. * one_third),
             magnitude_b: 0.01,
         }
+    }
+}
+
+impl Display for ChromaticAberration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let base_angle = Vec2::new(1., 0.);
+        let angle = |color_dir| base_angle.angle_between(color_dir) * 180. / PI + 180.;
+
+        write!(
+            f,
+            "Chromatic Aberration [magnitude, angle]:  R: [{:.3}, {:4.0}°] G: [{:.3}, {:4.0}°] B: [{:.3}, {:4.0}°]",
+            self.magnitude_r,
+            angle(self.dir_r),
+            self.magnitude_g,
+            angle(self.dir_g),
+            self.magnitude_b,
+            angle(self.dir_b)
+        )
     }
 }
 

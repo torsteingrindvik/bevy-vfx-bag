@@ -185,7 +185,6 @@ impl bevy::prelude::Plugin for Plugin {
 }
 
 fn adapt_image_for_lut_use(
-    mut commands: Commands,
     mut assets: ResMut<Assets<Image>>,
     mut luts: Query<&mut Lut, Changed<Lut>>,
 ) {

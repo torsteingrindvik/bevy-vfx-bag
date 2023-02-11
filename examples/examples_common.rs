@@ -8,6 +8,7 @@ use bevy::{
     window::WindowResized,
 };
 use core::f32::consts::PI;
+use std::fmt::Display;
 
 /// Adds some "sane defaults" for showing examples/development:
 ///
@@ -20,6 +21,12 @@ pub struct SaneDefaultsPlugin;
 pub struct ListItem {
     name: String,
     enabled: bool,
+}
+
+pub fn print_on_change<T: Display + Component>(things: Query<&T, Changed<T>>) {
+    for thing in &things {
+        info!("{thing}");
+    }
 }
 
 #[derive(Debug, Component, Default, Clone)]

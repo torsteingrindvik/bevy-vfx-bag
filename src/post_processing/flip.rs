@@ -16,6 +16,7 @@ use bevy::{
         RenderSet,
     },
 };
+use std::fmt::Display;
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
@@ -163,6 +164,12 @@ pub enum Flip {
 
     /// Flip both axes.
     HorizontalVertical,
+}
+
+impl Display for Flip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 impl ExtractComponent for Flip {

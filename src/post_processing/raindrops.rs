@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bevy::render::{
     extract_resource::{ExtractResource, ExtractResourcePlugin},
     render_asset::RenderAssets,
@@ -198,10 +200,10 @@ fn queue(
 #[derive(Debug, Component, Clone, Copy, ShaderType)]
 pub struct Raindrops {
     /// How quickly the raindrops animate.
-    pub time_scaling: f32,
+    pub speed: f32,
 
     /// How much the raindrops warp the image.
-    pub intensity: f32,
+    pub warping: f32,
 
     /// How zoomed in the raindrops texture is.
     pub zoom: f32,
@@ -210,10 +212,20 @@ pub struct Raindrops {
 impl Default for Raindrops {
     fn default() -> Self {
         Self {
-            time_scaling: 0.8,
-            intensity: 0.03,
+            speed: 0.8,
+            warping: 0.03,
             zoom: 1.0,
         }
+    }
+}
+
+impl Display for Raindrops {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Raindrops speed: {}, warping: {}, zoom: {}",
+            self.speed, self.warping, self.zoom
+        )
     }
 }
 

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -146,6 +148,16 @@ impl Default for Blur {
             amount: 0.5,
             kernel_radius: 0.01,
         }
+    }
+}
+
+impl Display for Blur {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Blur amount: {}, radius: {}",
+            self.amount, self.kernel_radius
+        )
     }
 }
 

@@ -11,13 +11,14 @@ fn main() {
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_plugin(PostProcessingPlugin::default())
         .add_startup_system(startup)
+        .add_system(examples_common::print_on_change::<Flip>)
         .add_system_to_schedule(CoreSchedule::FixedUpdate, update)
         .insert_resource(FixedTime::new_from_secs(1.5))
         .run();
 }
 
 fn startup(mut commands: Commands) {
-    info!("Flips the screen orientation every second.");
+    info!("Flips the screen orientation every interval.");
 
     commands.spawn((
         Camera3dBundle {
@@ -39,6 +40,4 @@ fn update(mut query: Query<&mut Flip, With<Camera>>) {
         Flip::Vertical => Flip::HorizontalVertical,
         Flip::HorizontalVertical => Flip::None,
     };
-
-    info!("{:?}", *flip);
 }

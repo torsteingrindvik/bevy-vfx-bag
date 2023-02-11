@@ -17,6 +17,7 @@ use bevy::{
         RenderSet,
     },
 };
+use std::fmt::Display;
 
 use crate::post_processing::DrawPostProcessingEffect;
 
@@ -213,6 +214,12 @@ pub struct Mask {
 
     /// Which [`MaskVariant`] to produce.
     pub variant: MaskVariant,
+}
+
+impl Display for Mask {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Mask {:?}, strength: {}", self.variant, self.strength)
+    }
 }
 
 impl Mask {
