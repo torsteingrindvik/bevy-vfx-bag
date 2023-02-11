@@ -14,7 +14,7 @@ use bevy::{
             ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines,
         },
         renderer::RenderDevice,
-        RenderStage,
+        RenderSet,
     },
 };
 
@@ -73,15 +73,15 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<MaskUniform>::default());
 
         super::render_app(app)
-            .add_system_to_stage(
-                RenderStage::Extract,
+            .add_system_to_schedule(
+                ExtractSchedule,
                 super::extract_post_processing_camera_phases::<Mask>,
             )
             .init_resource::<MaskData>()
             .init_resource::<UniformBindGroup<MaskUniform>>()
             .init_resource::<SpecializedRenderPipelines<MaskData>>()
-            .add_system_to_stage(RenderStage::Prepare, prepare)
-            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_system(prepare.in_set(RenderSet::Prepare))
+            .add_system(queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<MaskUniform>>();
     }
 }

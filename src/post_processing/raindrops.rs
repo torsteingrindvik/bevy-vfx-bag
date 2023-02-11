@@ -6,6 +6,7 @@ use bevy::render::{
         AddressMode, BindingResource, Sampler, SamplerBindingType, SamplerDescriptor,
         TextureSampleType, TextureViewDimension,
     },
+    RenderSet,
 };
 pub(crate) use bevy::{
     asset::load_internal_asset,
@@ -22,7 +23,6 @@ pub(crate) use bevy::{
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
         },
         renderer::RenderDevice,
-        RenderStage,
     },
 };
 
@@ -122,14 +122,14 @@ impl bevy::prelude::Plugin for Plugin {
             .insert_resource(RaindropsTextureHandle(texture_handle));
 
         super::render_app(app)
-            .add_system_to_stage(
-                RenderStage::Extract,
+            .add_system_to_schedule(
+                ExtractSchedule,
                 super::extract_post_processing_camera_phases::<Raindrops>,
             )
             .init_resource::<RaindropsData>()
             .init_resource::<UniformBindGroup<Raindrops>>()
-            .add_system_to_stage(RenderStage::Prepare, prepare)
-            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_system(prepare.in_set(RenderSet::Prepare))
+            .add_system(queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Raindrops>>();
     }
 }

@@ -21,7 +21,7 @@ use bevy::{
         },
         renderer::RenderDevice,
         texture::{CompressedImageFormats, ImageType},
-        RenderStage,
+        RenderSet,
     },
 };
 
@@ -173,13 +173,13 @@ impl bevy::prelude::Plugin for Plugin {
             .add_system(adapt_image_for_lut_use);
 
         super::render_app(app)
-            .add_system_to_stage(
-                RenderStage::Extract,
+            .add_system_to_schedule(
+                ExtractSchedule,
                 super::extract_post_processing_camera_phases::<Lut>,
             )
             .init_resource::<LutData>()
-            .add_system_to_stage(RenderStage::Prepare, prepare)
-            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_system(prepare.in_set(RenderSet::Prepare))
+            .add_system(queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawLut>();
     }
 }
@@ -189,6 +189,13 @@ impl bevy::prelude::Plugin for Plugin {
 #[derive(Debug, Component)]
 pub struct PreparedLut;
 
+// fn adapt_image_for_lut_use(
+//     mut commands: Commands,
+//     mut luts: Query<(Entity,  PreparedLut, Changed<mut Lut>)>,
+// ) {
+//     for lut in luts {}
+// }
+
 // TODO: If the LUT changes at runtime, the entity will _still_ have PreparedLut, but the underlying
 // handle points to something without modified image.
 //
@@ -197,11 +204,11 @@ fn adapt_image_for_lut_use(
     mut commands: Commands,
     mut ev_asset: EventReader<AssetEvent<Image>>,
     mut assets: ResMut<Assets<Image>>,
-    luts: Query<(Entity, &Lut)>,
+    luts: Query<(Entity, &Lut, Changed<Lut>)>,
 ) {
     for ev in ev_asset.iter() {
         if let AssetEvent::Created { handle } = ev {
-            if let Some((e, _)) = luts.iter().find(|(_, lut)| lut.texture == *handle) {
+            if let Some((e, _, _)) = luts.iter().find(|(_, lut, _)| lut.texture == *handle) {
                 let image = assets
                     .get_mut(handle)
                     .expect("Handle should point to asset");

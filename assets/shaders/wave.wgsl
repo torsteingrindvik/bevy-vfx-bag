@@ -1,5 +1,5 @@
 #import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_pbr::globals
+#import bevy_render::globals
 #import bevy_pbr::utils
 
 @group(0) @binding(0)

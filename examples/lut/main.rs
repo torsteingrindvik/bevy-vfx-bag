@@ -64,11 +64,4 @@ fn update(
             _ => unreachable!(),
         }
     }
-
-    // text.0 = format!(
-    //     "(←→) LUT {}/{num_luts}: {name}, [S]plit: {:?}, [P]assthrough: {:?}",
-    //     *choice + 1,
-    //     lut.split_vertically,
-    //     passthrough.0
-    // );
 }

@@ -1,3 +1,4 @@
+use bevy::render::RenderSet;
 pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -13,7 +14,6 @@ pub(crate) use bevy::{
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
         },
         renderer::RenderDevice,
-        RenderStage,
     },
 };
 
@@ -98,14 +98,14 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<Wave>::default());
 
         super::render_app(app)
-            .add_system_to_stage(
-                RenderStage::Extract,
+            .add_system_to_schedule(
+                ExtractSchedule,
                 super::extract_post_processing_camera_phases::<Wave>,
             )
             .init_resource::<WaveData>()
             .init_resource::<UniformBindGroup<Wave>>()
-            .add_system_to_stage(RenderStage::Prepare, prepare)
-            .add_system_to_stage(RenderStage::Queue, queue)
+            .add_system(prepare.in_set(RenderSet::Prepare))
+            .add_system(queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Wave>>();
     }
 }

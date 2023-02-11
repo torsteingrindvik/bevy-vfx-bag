@@ -32,7 +32,7 @@ use bevy::{
         renderer::{RenderContext, RenderDevice},
         texture::BevyDefault,
         view::{ExtractedView, ViewTarget},
-        Extract, RenderApp, RenderStage,
+        Extract, RenderApp, RenderSet,
     },
     utils::{FloatOrd, HashMap},
 };
@@ -594,12 +594,9 @@ impl Plugin for PostProcessingPlugin {
             .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
             .init_resource::<PostProcessingSharedBindGroups>()
             .init_resource::<PostProcessingSharedLayout>()
-            .add_system_to_stage(RenderStage::Queue, queue_post_processing_shared_bind_groups)
-            .add_system_to_stage(RenderStage::Extract, extract_camera_phases)
-            .add_system_to_stage(
-                RenderStage::PhaseSort,
-                sort_phase_system::<PostProcessingPhaseItem>,
-            );
+            .add_system_to_schedule(ExtractSchedule, extract_camera_phases)
+            .add_system(queue_post_processing_shared_bind_groups.in_set(RenderSet::Queue))
+            .add_system(sort_phase_system::<PostProcessingPhaseItem>.in_set(RenderSet::PhaseSort));
 
         app.add_plugin(blur::Plugin);
         app.add_plugin(chromatic_aberration::Plugin);
