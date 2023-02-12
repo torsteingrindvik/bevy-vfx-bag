@@ -33,7 +33,6 @@ fn make_lut() -> Vec<u8> {
     let mut buf: Vec<Pixel> = Vec::with_capacity(PIXELS as usize);
 
     for n in 0..PIXELS {
-        let n = n as u32;
         let block_column = n % BLOCK_SIZE;
         let block_row = n / WIDTH;
         let block_index = (n % WIDTH) / BLOCK_SIZE;
