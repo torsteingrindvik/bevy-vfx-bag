@@ -7,7 +7,7 @@ on:
 name: Continuous integration
 
 jobs:
-  ci:
+  checks:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
@@ -27,11 +27,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy -- -D warnings
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
       - name: cargo check
-        run: cargo check
+        run: cargo check --all-targets
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.toml') }}
       - name: cargo doc
-        run: cargo doc
+        run: cargo doc --no-deps
