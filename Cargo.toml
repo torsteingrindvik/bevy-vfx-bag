@@ -20,6 +20,7 @@ dev = []
 bevy = { path = "../bevy-main", default-features = false, features = [
     "bevy_asset",
     "bevy_render",
+    "bevy_core_pipeline",
     "png",
     "tga",
 ] }

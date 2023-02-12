@@ -17,140 +17,9 @@ use std::fmt::Display;
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
 
-#[derive(Debug, Clone)]
-pub struct ListItem {
-    name: String,
-    enabled: bool,
-}
-
-pub fn print_on_change<T: Display + Component>(things: Query<&T, Changed<T>>) {
+pub(crate) fn print_on_change<T: Display + Component>(things: Query<&T, Changed<T>>) {
     for thing in &things {
         info!("{thing}");
-    }
-}
-
-#[derive(Debug, Component, Default, Clone)]
-pub struct List {
-    items: Vec<ListItem>,
-    is_selected: bool,
-    line_pointed_to: usize,
-    font: Handle<Font>,
-}
-
-impl List {
-    pub fn new<S: AsRef<str>>(font: Handle<Font>, items: impl IntoIterator<Item = S>) -> Self {
-        Self {
-            font,
-            items: items
-                .into_iter()
-                .map(|name| ListItem {
-                    name: name.as_ref().to_string(),
-                    enabled: true,
-                })
-                .collect(),
-            ..default()
-        }
-    }
-
-    pub fn is_enabled(&self, name: &str) -> bool {
-        self.items
-            .iter()
-            .find(|item| item.name == name)
-            .expect("The item with the given name should be part of the list")
-            .enabled
-    }
-
-    pub fn enabled_items(&self) -> Vec<&str> {
-        self.items
-            .iter()
-            .filter(|item| item.enabled)
-            .map(|item| item.name.as_str())
-            .collect()
-    }
-
-    pub fn disabled_items(&self) -> Vec<&str> {
-        self.items
-            .iter()
-            .filter(|item| !item.enabled)
-            .map(|item| item.name.as_str())
-            .collect()
-    }
-
-    pub fn as_text(&self) -> Text {
-        Text::from_sections(
-            self.items
-                .iter()
-                .enumerate()
-                .map(move |(i, item)| {
-                    let mut value = "".to_owned();
-                    if i == self.line_pointed_to {
-                        value += "→ ";
-                    }
-                    value += item.name.as_str();
-                    value += "\n";
-
-                    let mut text_section = TextSection {
-                        value,
-                        style: TextStyle {
-                            font: self.font.clone(),
-                            font_size: 30.0,
-                            color: Color::WHITE,
-                        },
-                    };
-                    if i == self.line_pointed_to && self.is_selected {
-                        text_section.style.color = Color::GOLD;
-                    } else if item.enabled {
-                        text_section.style.color = Color::WHITE;
-                    } else {
-                        text_section.style.color = Color::DARK_GRAY;
-                    }
-                    text_section
-                })
-                .collect::<Vec<_>>(),
-        )
-    }
-
-    pub fn as_text_bundle(&self) -> TextBundle {
-        TextBundle {
-            text: self.as_text(),
-            ..default()
-        }
-        .with_style(Style {
-            margin: UiRect::all(Val::Px(10.0)),
-            ..default()
-        })
-    }
-
-    pub fn items(&self) -> impl Iterator<Item = &ListItem> {
-        self.items.iter()
-    }
-
-    pub fn toggle_selected(&mut self) {
-        self.is_selected = !self.is_selected;
-    }
-
-    pub fn toggle_enabled(&mut self) {
-        self.items[self.line_pointed_to].enabled = !self.items[self.line_pointed_to].enabled;
-    }
-
-    fn change_line_pointed_to(&mut self, diff: isize) {
-        let pointed_to_before = self.line_pointed_to;
-        if diff == 1 {
-            self.line_pointed_to = (self.line_pointed_to + 1).min(self.items.len() - 1);
-        } else {
-            self.line_pointed_to = pointed_to_before.saturating_sub(1);
-        }
-
-        if self.is_selected && (self.line_pointed_to != pointed_to_before) {
-            self.items.swap(self.line_pointed_to, pointed_to_before);
-        }
-    }
-
-    pub fn up(&mut self) {
-        self.change_line_pointed_to(-1);
-    }
-    pub fn down(&mut self) {
-        self.change_line_pointed_to(1);
     }
 }
 
@@ -199,8 +68,6 @@ impl Plugin for ShapesExamplePlugin {
             .add_system(set_camera_viewports)
             .add_system(shapes::rotate)
             .add_system(ui::fps_text_update);
-        // .add_system(ui::ui_change_text)
-        // .add_system(ui::ui_change_selection);
     }
 }
 

@@ -4,8 +4,6 @@
 #[path = "../examples_common.rs"]
 mod examples_common;
 
-use std::f32::consts::PI;
-
 use bevy::prelude::*;
 use bevy_vfx_bag::post_processing::{
     chromatic_aberration::ChromaticAberration, PostProcessingPlugin,
