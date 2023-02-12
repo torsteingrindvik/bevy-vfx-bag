@@ -217,6 +217,7 @@ fn adapt_image_for_lut_use(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn prepare(
     data: Res<LutData>,
     mut views: Query<

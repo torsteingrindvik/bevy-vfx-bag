@@ -423,6 +423,7 @@ impl FromWorld for PostProcessingSharedLayout {
 /// Else a default is inserted.
 ///
 /// A `PostProcessingCamera` component is added in order to identify cameras that have any effect applied.
+#[allow(clippy::type_complexity)]
 pub(crate) fn extract_post_processing_camera_phases<C: Component>(
     mut commands: Commands,
     cameras: Extract<Query<(Entity, &Camera, Option<&Order<C>>), With<C>>>,
