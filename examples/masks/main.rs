@@ -22,7 +22,7 @@ fn main() {
 fn startup(mut commands: Commands) {
     info!("Press [1|2|3] to change which mask is in use, [Up|Down] to change strenght, [L|H] to go low/high");
 
-    asdf
+    asdf;
 
     commands
         .spawn(Camera3dBundle {
