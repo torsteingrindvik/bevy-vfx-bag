@@ -1,6 +1,6 @@
 # Bevy Visual Effects Bag
 
-This crate has an assortment of effects easily applied to Bevy apps via plugins.
+This crate has an assortment of effects for use with Bevy applications.
 
 Here is a showcase made by adding some visual effects to Bevy's breakout example.
 Note that the game itself is not modified except visually.
@@ -26,6 +26,7 @@ following table:
 
 |bevy-vfx-bag|bevy|
 |---|---|
+|0.2.0|main|
 |0.1.0|0.9.0|
 
 ## Getting started
@@ -33,9 +34,8 @@ following table:
 The general strategy is:
 
 * Add the main plugin: `BevyVfxBagPlugin`.
-* Add the effect plugin you are interested in.
-* Add the `PostProcessingInput` marker component to your camera. This camera's output is then used as input for the post processing effects.
-* Add any systems to change effect parameters at runtime.
+* Add the post processing effect components on top of the camera(s) you want the effects to apply to.
+* Add any systems to change effects at runtime.
 
 ```rust,ignore
 // See the examples folder for fleshed out examples,
@@ -45,7 +45,6 @@ fn main(){
   App::new()
     .add_plugins(DefaultPlugins)
     .add_plugin(BevyVfxBagPlugin) // This needs to be added for any effect to work
-    .add_plugin(FlipPlugin) // This needs to be added for the flip effect to work
     .add_startup_system(setup)
     .add_system(update)
     .run();
@@ -54,19 +53,13 @@ fn main(){
 fn setup(mut commands: Commands) {
     commands
         .spawn(Camera3dBundle { ... })
-        .insert(PostProcessingInput); // Marking the camera is important!
+        .insert(Blur::default());
 }
 
-fn update(mut flip: ResMut<Flip>) {
+fn update(mut blur: Query<&mut Blur>) {
     // Here I can change the parameters of this effect at runtime.
 }
 ```
-
-## Limitations
-
-- You can only use a single camera as the source for effects.
-- You cannot change the order of applied effects at runtime- this is decided by plugin insertion order when making the `App`.
-- You can toggle effects off/on at runtime- but the shaders will still run. They simply pass through the input image to the output, but this requires a texture sample. Therefore there is likely a slight performance cost for added-but-disabled effects.
 
 ## Examples
 

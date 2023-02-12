@@ -1,25 +1,22 @@
-#import bevy_sprite::mesh2d_view_bindings
-#import bevy_pbr::utils
+#import bevy_core_pipeline::fullscreen_vertex_shader
+#import bevy_render::globals
 
-@group(1) @binding(0)
-var texture: texture_2d<f32>;
+@group(0) @binding(0)
+var t: texture_2d<f32>;
+@group(0) @binding(1)
+var ts: sampler;
+@group(0) @binding(2)
+var<uniform> globals: Globals;
 
-@group(1) @binding(1)
-var our_sampler: sampler;
-
-struct FlipUniform {
+struct Flip {
     x: f32,
     y: f32,
 };
-@group(1) @binding(2)
-var<uniform> flip: FlipUniform;
+@group(1) @binding(0)
+var<uniform> flip: Flip;
 
-fn fragment_impl(
-    position: vec4<f32>,
-    uv: vec2<f32>
-) -> vec4<f32> {
-    let uv = abs(vec2<f32>(flip.x, flip.y) - uv);
-    return vec4<f32>(textureSample(texture, our_sampler, uv).rgb, 1.0);
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    let uv = abs(vec2<f32>(flip.x, flip.y) - in.uv);
+    return textureSample(t, ts, uv);
 }
-
-#import bevy_vfx_bag::post_processing_passthrough

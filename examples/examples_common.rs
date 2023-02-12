@@ -1,6 +1,10 @@
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
+use bevy::{
+    diagnostic::FrameTimeDiagnosticsPlugin,
+    prelude::*,
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+};
 use core::f32::consts::PI;
+use std::fmt::Display;
 
 /// Adds some "sane defaults" for showing examples/development:
 ///
@@ -9,27 +13,24 @@ use core::f32::consts::PI;
 /// * Close on ESC button press
 pub struct SaneDefaultsPlugin;
 
-#[derive(Debug, Resource)]
-pub struct ExampleText(pub String);
-
-impl Default for ExampleText {
-    fn default() -> Self {
-        Self("Loading...".into())
+#[allow(dead_code)]
+pub(crate) fn print_on_change<T: Display + Component>(things: Query<&T, Changed<T>>) {
+    for thing in &things {
+        info!("{thing}");
     }
 }
 
 impl Plugin for SaneDefaultsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ExampleText>()
-            .add_plugins(
-                DefaultPlugins
-                    .set(AssetPlugin {
-                        watch_for_changes: true,
-                        ..default()
-                    })
-                    .set(ImagePlugin::default_nearest()),
-            )
-            .add_system(bevy::window::close_on_esc);
+        app.add_plugins(
+            DefaultPlugins
+                .set(AssetPlugin {
+                    watch_for_changes: true,
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        )
+        .add_system(bevy::window::close_on_esc);
     }
 }
 
@@ -45,12 +46,6 @@ pub struct ShapesExamplePlugin {
 }
 
 impl ShapesExamplePlugin {
-    // pub fn with_3d_camera() -> Self {
-    //     Self {
-    //         add_3d_camera_bundle: true,
-    //     }
-    // }
-
     pub fn without_3d_camera() -> Self {
         Self {
             add_3d_camera_bundle: false,
@@ -68,8 +63,7 @@ impl Plugin for ShapesExamplePlugin {
             .add_startup_system(shapes::setup)
             .add_startup_system(ui::setup)
             .add_system(shapes::rotate)
-            .add_system(ui::fps_text_update)
-            .add_system(ui::ui_text_update);
+            .add_system(ui::fps_text_update);
     }
 }
 
@@ -98,7 +92,7 @@ mod shapes {
             meshes.add(shape::Box::default().into()),
             meshes.add(shape::Capsule::default().into()),
             meshes.add(shape::Torus::default().into()),
-            meshes.add(shape::Icosphere::default().into()),
+            meshes.add(shape::Icosphere::default().try_into().unwrap()),
             meshes.add(shape::UVSphere::default().into()),
         ];
 
@@ -209,40 +203,7 @@ mod ui {
     #[derive(Component)]
     pub(crate) struct FpsText;
 
-    // A unit struct to help identify the example UI text component
-    #[derive(Component)]
-    pub(crate) struct UiText;
-
     pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-        // UI camera
-        // commands.spawn_bundle(Camera2dBundle::default());
-        // Text with one section
-        commands
-            .spawn(
-                // Create a TextBundle that has a Text with a single section.
-                TextBundle::from_section(
-                    // Accepts a `String` or any type that converts into a `String`, such as `&str`
-                    "hello\nbevy!",
-                    TextStyle {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                        font_size: 30.0,
-                        color: Color::WHITE,
-                    },
-                ) // Set the alignment of the Text
-                .with_text_alignment(TextAlignment::TOP_CENTER)
-                // Set the style of the TextBundle itself.
-                .with_style(Style {
-                    align_self: AlignSelf::FlexEnd,
-                    position_type: PositionType::Absolute,
-                    position: UiRect {
-                        bottom: Val::Px(5.0),
-                        left: Val::Px(15.0),
-                        ..default()
-                    },
-                    ..default()
-                }),
-            )
-            .insert(UiText);
         // Text with multiple sections
         commands
             .spawn(
@@ -276,15 +237,6 @@ mod ui {
             .insert(FpsText);
     }
 
-    pub(crate) fn ui_text_update(
-        message: Res<ExampleText>,
-        mut query: Query<&mut Text, With<UiText>>,
-    ) {
-        for mut text in &mut query {
-            text.sections[0].value = message.0.clone();
-        }
-    }
-
     pub(crate) fn fps_text_update(
         diagnostics: Res<Diagnostics>,
         mut query: Query<&mut Text, With<FpsText>>,
@@ -300,6 +252,9 @@ mod ui {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// MAIN
+////////////////////////////////////////////////////////////////////////////////
 #[allow(dead_code)]
 fn main() {
     println!("Not an example, just shared code between examples")

@@ -1,6 +1,6 @@
 [package]
 name = "bevy-vfx-bag"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "An assorted bag of visual effects for Bevy"
 categories = ["graphics", "game-development", "rendering"]
@@ -17,33 +17,29 @@ exclude = [".github/", "scripts/"]
 dev = []
 
 [dependencies]
-# bevy = { path = "../bevy", default-features = false, features = [
+# bevy = { path = "../bevy-main", default-features = false, features = [
 #     "bevy_asset",
-#     "render",
+#     "bevy_render",
+#     "bevy_core_pipeline",
 #     "png",
 #     "tga",
 # ] }
 
-bevy = { version = "0.9.0", default-features = false, features = [
+bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
     "bevy_asset",
-    "render",
+    "bevy_render",
+    "bevy_core_pipeline",
     "png",
     "tga",
 ] }
 
-# TODO: Remove this section when alsa semver issue is fixed
-[target.'cfg(unix)'.dependencies]
-alsa = "=0.6.0"
-
 [dev-dependencies]
-bevy = { version = "0.9.0", features = ["tga"] }
-# bevy = { path = "../bevy", features = ["tga"] }
+bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
+# bevy_mod_debugdump = "0.6.0"
+# bevy_mod_debugdump = { path = "../bevy_mod_debugdump" }
+# bevy = { path = "../bevy-main", features = ["tga"] }
 
 color-eyre = "0.6"
 image = "0.24"
 
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
+once_cell = "1"

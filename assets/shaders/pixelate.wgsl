@@ -1,34 +1,30 @@
-#import bevy_sprite::mesh2d_view_bindings
-#import bevy_pbr::utils
+#import bevy_core_pipeline::fullscreen_vertex_shader
+#import bevy_render::globals
 
-@group(1) @binding(0)
-var texture: texture_2d<f32>;
-
-@group(1) @binding(1)
-var our_sampler: sampler;
+@group(0) @binding(0)
+var t: texture_2d<f32>;
+@group(0) @binding(1)
+var ts: sampler;
+@group(0) @binding(2)
+var<uniform> globals: Globals;
 
 struct Pixelate {
     block_size: f32,
 };
-@group(1) @binding(2)
+@group(1) @binding(0)
 var<uniform> pixelate: Pixelate;
 
-fn fragment_impl(
-    position: vec4<f32>,
-    uv: vec2<f32>
-) -> vec4<f32> {
-    var uv = uv + 0.5;
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    let resolution = vec2<f32>(textureDimensions(t));
 
-    let width_height_over_block_size = view.viewport.zw / max(1.0, pixelate.block_size);
+    let width_height_over_block_size = resolution / max(1.0, pixelate.block_size);
 
+    var uv = in.uv + 0.5;
     uv *= width_height_over_block_size;
     uv = floor(uv);
-
     uv /= width_height_over_block_size;
-
     uv -= 0.5;
 
-    return vec4<f32>(textureSample(texture, our_sampler, uv).rgb, 1.0);
+    return textureSample(t, ts, uv); 
 }
-
-#import bevy_vfx_bag::post_processing_passthrough
