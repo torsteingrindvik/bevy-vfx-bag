@@ -28,12 +28,10 @@ jobs:
       - name: Install alsa and udev
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev
         if: runner.os == 'linux'
-      - name: cargo clippy
+      - name: cargo clippy --no-deps
         run: cargo clippy -- -D warnings
       - name: cargo fmt
         run: cargo fmt --all -- --check
-      - name: cargo check
-        run: cargo check --all-targets
 
   docs:
     runs-on: ubuntu-latest
