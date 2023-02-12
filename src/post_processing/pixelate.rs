@@ -21,7 +21,7 @@ pub(crate) use bevy::{
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const PIXELATE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11093977931118718560);
@@ -93,7 +93,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Pixelate>,
+        &Order<Pixelate>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
@@ -134,10 +134,12 @@ fn queue(
     }
 }
 
-/// TODO
+/// Pixelate settings.
 #[derive(Debug, ShaderType, Component, Clone, Copy)]
 pub struct Pixelate {
-    /// TODO
+    /// How many pixels in the width and height in a block after pixelation. One block has a constant color within it.
+    ///
+    /// The shader sets a lower bound to 1.0, since that would not change the outcome.
     pub block_size: f32,
 }
 

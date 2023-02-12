@@ -20,7 +20,7 @@ use std::fmt::Display;
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const FLIP_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1649866799156783187);
@@ -88,7 +88,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Flip>,
+        &Order<Flip>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
@@ -129,7 +129,8 @@ fn queue(
     }
 }
 
-/// The uniform representation of [`FlipSettings`].
+#[doc(hidden)]
+/// The uniform representation of [`Flip`].
 #[derive(Debug, ShaderType, Clone, Component)]
 pub struct FlipUniform {
     pub(crate) x: f32,

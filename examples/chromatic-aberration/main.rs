@@ -5,9 +5,7 @@
 mod examples_common;
 
 use bevy::prelude::*;
-use bevy_vfx_bag::post_processing::{
-    chromatic_aberration::ChromaticAberration, PostProcessingPlugin,
-};
+use bevy_vfx_bag::{post_processing::chromatic_aberration::ChromaticAberration, BevyVfxBagPlugin};
 
 fn main() {
     let mut app = App::new();
@@ -15,7 +13,7 @@ fn main() {
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
         .add_system(examples_common::print_on_change::<ChromaticAberration>)
-        .add_plugin(PostProcessingPlugin::default())
+        .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(startup)
         .add_system(update)
         .run();

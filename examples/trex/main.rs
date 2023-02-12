@@ -2,7 +2,7 @@
 mod examples_common;
 
 use bevy::prelude::*;
-use bevy_vfx_bag::post_processing::{wave::Wave, PostProcessingPlugin};
+use bevy_vfx_bag::{post_processing::wave::Wave, BevyVfxBagPlugin};
 
 #[derive(Debug, Resource, Default)]
 struct SlowerTime(Time);
@@ -11,7 +11,7 @@ fn main() {
     App::new()
         .add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(PostProcessingPlugin::default())
+        .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(startup)
         .add_system(update)
         .run();

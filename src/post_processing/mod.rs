@@ -37,8 +37,6 @@ use bevy::{
     utils::{FloatOrd, HashMap},
 };
 
-// use super::util;
-
 /// Blur
 pub mod blur;
 
@@ -83,22 +81,26 @@ where
 
 /// Adds a `.order` helper method to a component.
 /// When used on a post processing effect, it determines the order in which the effect is applied.
-/// See [`VfxOrdering`] for more information.
+///
+/// See [`Order`] for more information.
+///
+/// Also see the multi window example for a usage example.
 pub trait PostProcessingOrder: Sized {
-    /// Adds an ordering to the component.
-    fn with_order(self, order: f32) -> (Self, VfxOrdering<Self>);
+    /// Sets the order value on a component, and returns the component
+    /// as well as the order as a bundle.
+    /// This is therefore meant as a helper when inserting the effect component.
+    fn order(self, order: f32) -> (Self, Order<Self>);
 }
 
 impl<U> PostProcessingOrder for U
 where
     U: Component,
 {
-    fn with_order(self, order: f32) -> (Self, VfxOrdering<Self>) {
-        (self, VfxOrdering::new(order))
+    fn order(self, order: f32) -> (Self, Order<Self>) {
+        (self, Order::new(order))
     }
 }
 
-/// TODO
 struct SetEffectBindGroup<U: Component + ShaderType, const I: usize>(PhantomData<U>);
 impl<P: PhaseItem, U: Component + ShaderType, const I: usize> RenderCommand<P>
     for SetEffectBindGroup<U, I>
@@ -212,13 +214,13 @@ pub(crate) fn create_layout_and_pipeline(
 
 /// Bind groups.
 #[derive(Resource, Default, Debug)]
-pub struct PostProcessingSharedBindGroups {
+struct PostProcessingSharedBindGroups {
     cached_texture_bind_groups: HashMap<TextureViewId, BindGroup>,
     current_source_texture: Mutex<Option<TextureViewId>>,
 }
 
 /// Render command which sets the shared bind group containing the source texture and sampler as well as the globals.
-pub struct SetTextureSamplerGlobals<const I: usize>;
+struct SetTextureSamplerGlobals<const I: usize>;
 
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextureSamplerGlobals<I> {
     type ViewWorldQuery = ();
@@ -254,7 +256,7 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetTextureSamplerGlobals
 }
 
 /// Render command for drawing the full screen triangle.
-pub struct DrawPostProcessing;
+struct DrawPostProcessing;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawPostProcessing {
     type Param = ();
@@ -332,7 +334,7 @@ fn queue_post_processing_shared_bind_groups(
 /// Contains a draw function which is specialized for a specific material.
 /// Points to a matching pipeline- it will for example point to a specific fragment shader as well as
 /// having a bind group specialized for the material.
-pub struct PostProcessingPhaseItem {
+struct PostProcessingPhaseItem {
     entity: Entity,
     sort_key: FloatOrd,
     draw_function: DrawFunctionId,
@@ -366,7 +368,7 @@ impl CachedRenderPipelinePhaseItem for PostProcessingPhaseItem {
 /// The bind group layout common to post processing effects.
 /// This includes the texture and sampler bind group entries and the globals uniform.
 #[derive(Debug, Resource, Clone)]
-pub struct PostProcessingSharedLayout {
+struct PostProcessingSharedLayout {
     pub(crate) shared_layout: BindGroupLayout,
 }
 
@@ -417,20 +419,20 @@ impl FromWorld for PostProcessingSharedLayout {
 /// This system will add a default post processing phase to all active cameras, given that this camera
 /// has the given component `C` in the render world.
 ///
-/// A `VfxOrdering<C>` component can be added to the camera to control the ordering of the effect.
+/// A `Order<C>` component can be added to the camera to control the ordering of the effect.
 /// Else a default is inserted.
 ///
 /// A `PostProcessingCamera` component is added in order to identify cameras that have any effect applied.
 pub(crate) fn extract_post_processing_camera_phases<C: Component>(
     mut commands: Commands,
-    cameras: Extract<Query<(Entity, &Camera, Option<&VfxOrdering<C>>), With<C>>>,
+    cameras: Extract<Query<(Entity, &Camera, Option<&Order<C>>), With<C>>>,
 ) {
     for (entity, camera, maybe_ordering) in &cameras {
         if camera.is_active {
             let ordering = if let Some(o) = maybe_ordering {
                 o.clone()
             } else {
-                VfxOrdering::new(0.0)
+                Order::new(0.0)
             };
 
             commands.get_or_spawn(entity).insert((
@@ -443,7 +445,7 @@ pub(crate) fn extract_post_processing_camera_phases<C: Component>(
 }
 
 /// The post processing node.
-pub struct PostProcessingNode {
+struct PostProcessingNode {
     query: QueryState<
         (
             &'static ExtractedCamera,
@@ -536,46 +538,50 @@ impl Node for PostProcessingNode {
 
 /// Decide on ordering for post processing effects.
 /// Lower numbers means run earlier.
+///
+/// This is per-camera and uses a generic marker to know which
+/// effect to change the order of.
+/// It's easier to use this via the [`PostProcessingOrder`] trait
+/// which adds a helper method for using this.
 #[derive(Debug, Component, Copy)]
-pub struct VfxOrdering<C> {
+pub struct Order<C> {
     /// Priority
-    pub priority: f32,
+    pub order: f32,
     marker: PhantomData<C>,
 }
 
-impl<C> From<VfxOrdering<C>> for FloatOrd {
-    fn from(ordering: VfxOrdering<C>) -> Self {
-        Self(ordering.priority)
+impl<C> From<Order<C>> for FloatOrd {
+    fn from(ordering: Order<C>) -> Self {
+        Self(ordering.order)
     }
 }
 
-impl<C> Clone for VfxOrdering<C> {
+impl<C> Clone for Order<C> {
     fn clone(&self) -> Self {
         Self {
-            priority: self.priority,
+            order: self.order,
             marker: self.marker,
         }
     }
 }
 
-impl<C> VfxOrdering<C> {
+impl<C> Order<C> {
     /// Create a new ordering.
     pub fn new(priority: f32) -> Self {
         Self {
-            priority,
+            order: priority,
             marker: PhantomData,
         }
     }
 }
 
-/// TODO
-#[derive(Debug, Default)]
-pub struct PostProcessingPlugin {}
-
 pub(crate) fn render_app(app: &mut App) -> &mut App {
     app.get_sub_app_mut(RenderApp)
         .expect("Need a render app for post processing")
 }
+
+#[derive(Debug, Default)]
+pub(crate) struct PostProcessingPlugin;
 
 impl Plugin for PostProcessingPlugin {
     fn build(&self, app: &mut App) {

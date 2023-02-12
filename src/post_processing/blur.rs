@@ -21,7 +21,7 @@ use bevy::{
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const BLUR_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 11044253213698850613);
@@ -89,7 +89,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Blur>,
+        &Order<Blur>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {

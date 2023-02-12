@@ -21,7 +21,7 @@ use std::fmt::Display;
 
 use crate::post_processing::DrawPostProcessingEffect;
 
-use super::{PostProcessingPhaseItem, UniformBindGroup, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem, UniformBindGroup};
 pub(crate) const MASK_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1059400090272595510);
 
@@ -108,7 +108,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Mask>,
+        &Order<Mask>,
         &MaskVariant,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
@@ -201,7 +201,7 @@ impl From<MaskVariant> for ShaderDefVal {
     }
 }
 
-/// TODO
+/// A darkening mask on the outer edges of the image.
 #[derive(Debug, Copy, Clone, Component)]
 pub struct Mask {
     /// The strength parameter of the mask in use.
@@ -254,7 +254,8 @@ impl Default for Mask {
     }
 }
 
-/// [`MaskSettings`] as a uniform.
+#[doc(hidden)]
+/// [`Mask`] as a uniform.
 #[derive(Debug, ShaderType, Clone, Component, Copy)]
 pub struct MaskUniform {
     pub(crate) strength: f32,

@@ -2,9 +2,12 @@
 mod examples_common;
 
 use bevy::prelude::*;
-use bevy_vfx_bag::post_processing::{
-    chromatic_aberration::ChromaticAberration, lut::Lut, masks::Mask, raindrops::Raindrops,
-    wave::Wave, PostProcessingPlugin,
+use bevy_vfx_bag::{
+    post_processing::{
+        chromatic_aberration::ChromaticAberration, lut::Lut, masks::Mask, raindrops::Raindrops,
+        wave::Wave,
+    },
+    BevyVfxBagPlugin,
 };
 
 fn main() {
@@ -12,7 +15,7 @@ fn main() {
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(PostProcessingPlugin::default())
+        .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(startup)
         .run();
 }

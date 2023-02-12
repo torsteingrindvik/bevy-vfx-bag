@@ -19,7 +19,7 @@ pub(crate) use bevy::{
 
 use crate::post_processing::UniformBindGroup;
 
-use super::{DrawPostProcessingEffect, PostProcessingPhaseItem, VfxOrdering};
+use super::{DrawPostProcessingEffect, Order, PostProcessingPhaseItem};
 
 const WAVE_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 1792660281364049744);
@@ -115,7 +115,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Wave>,
+        &Order<Wave>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {

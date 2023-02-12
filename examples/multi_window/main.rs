@@ -7,10 +7,12 @@ use bevy::{
     window::{Window, WindowRef},
 };
 
-use bevy_vfx_bag::post_processing::{
-    blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, lut::Lut, masks::Mask,
-    pixelate::Pixelate, raindrops::Raindrops, wave::Wave, PostProcessingOrder,
-    PostProcessingPlugin,
+use bevy_vfx_bag::{
+    post_processing::{
+        blur::Blur, chromatic_aberration::ChromaticAberration, flip::Flip, lut::Lut, masks::Mask,
+        pixelate::Pixelate, raindrops::Raindrops, wave::Wave, PostProcessingOrder,
+    },
+    BevyVfxBagPlugin,
 };
 
 fn main() {
@@ -18,7 +20,7 @@ fn main() {
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(PostProcessingPlugin::default())
+        .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(setup);
 
     app.run();
@@ -44,12 +46,12 @@ fn setup(mut commands: Commands) {
             },
             ..default()
         },
-        Wave::default().with_order(0.),
-        Pixelate::default().with_order(1.),
-        Mask::default().with_order(2.),
-        Lut::default().with_order(3.),
-        Blur::default().with_order(4.),
-        Flip::default().with_order(5.),
+        Wave::default().order(0.),
+        Pixelate::default().order(1.),
+        Mask::default().order(2.),
+        Lut::default().order(3.),
+        Blur::default().order(4.),
+        Flip::default().order(5.),
     ));
 
     // Third window: Camera has other effects
@@ -63,9 +65,9 @@ fn setup(mut commands: Commands) {
             },
             ..default()
         },
-        Mask::crt().with_order(0.),
-        Lut::arctic().with_order(1.),
-        ChromaticAberration::default().with_order(2.),
-        Raindrops::default().with_order(3.),
+        Mask::crt().order(0.),
+        Lut::arctic().order(1.),
+        ChromaticAberration::default().order(2.),
+        Raindrops::default().order(3.),
     ));
 }

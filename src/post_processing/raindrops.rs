@@ -30,7 +30,7 @@ pub(crate) use bevy::{
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const RAINDROPS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3481202994982538867);
@@ -141,7 +141,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<Raindrops>,
+        &Order<Raindrops>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
@@ -196,7 +196,7 @@ fn queue(
     }
 }
 
-/// TODO
+/// Raindrops settings.
 #[derive(Debug, Component, Clone, Copy, ShaderType)]
 pub struct Raindrops {
     /// How quickly the raindrops animate.

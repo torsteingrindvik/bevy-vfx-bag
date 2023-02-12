@@ -14,11 +14,6 @@ struct Mask {
 @group(1) @binding(0)
 var<uniform> mask: Mask;
 
-// TODO: Use built-in saturate when naga 0.10.0 is in Bevy.
-fn saturate2(e: vec2<f32>) -> vec2<f32> {
-    return clamp(e, vec2<f32>(0.0), vec2<f32>(1.0));
-}
-
 #ifdef SQUARE
 // A rounded square type mask.
 fn square(uv: vec2<f32>) -> f32 {
@@ -26,8 +21,8 @@ fn square(uv: vec2<f32>) -> f32 {
     // this impacts the width of the effect.
     // However this only creates a border in one corner.
     // The (1 - uv) version creates the diagonally mirrored border.
-    let uv_big = saturate2(uv * mask.strength);
-    let uv_big_inv = saturate2((1. - uv) * mask.strength);
+    let uv_big = saturate(uv * mask.strength);
+    let uv_big_inv = saturate((1. - uv) * mask.strength);
 
     // By multiplying the mirrored borders we can get a full border. 
     let square = uv_big * uv_big_inv;

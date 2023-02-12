@@ -6,5 +6,9 @@
 /// Post processing effects.
 pub mod post_processing;
 
+mod plugin;
+
+pub use plugin::BevyVfxBagPlugin;
+
 /// Utilities.
 pub(crate) mod util;

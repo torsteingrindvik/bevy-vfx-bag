@@ -2,14 +2,14 @@
 mod examples_common;
 
 use bevy::{input::mouse::MouseWheel, prelude::*};
-use bevy_vfx_bag::post_processing::{raindrops::Raindrops, PostProcessingPlugin};
+use bevy_vfx_bag::{post_processing::raindrops::Raindrops, BevyVfxBagPlugin};
 
 fn main() {
     let mut app = App::new();
 
     app.add_plugin(examples_common::SaneDefaultsPlugin)
         .add_plugin(examples_common::ShapesExamplePlugin::without_3d_camera())
-        .add_plugin(PostProcessingPlugin::default())
+        .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(startup)
         .add_system(examples_common::print_on_change::<Raindrops>)
         .add_system(update)

@@ -25,7 +25,7 @@ use bevy::{
     },
 };
 
-use super::{DrawPostProcessing, PostProcessingPhaseItem, SetTextureSamplerGlobals, VfxOrdering};
+use super::{DrawPostProcessing, Order, PostProcessingPhaseItem, SetTextureSamplerGlobals};
 
 pub(crate) const LUT_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3719875149378986812);
@@ -58,7 +58,6 @@ struct LutBindGroup {
     bind_group: BindGroup,
 }
 
-/// TODO
 struct SetLutImage<const I: usize>;
 impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetLutImage<I> {
     type Param = ();
@@ -224,7 +223,7 @@ fn prepare(
         (
             Entity,
             &mut RenderPhase<PostProcessingPhaseItem>,
-            &VfxOrdering<Lut>,
+            &Order<Lut>,
         ),
         With<Lut>,
     >,
@@ -273,7 +272,7 @@ fn queue(
     }
 }
 
-/// TODO
+/// A look-up texture. Maps colors to colors. Useful for colorschemes.
 #[derive(Debug, Component, Clone)]
 pub struct Lut {
     /// The 3D look-up texture

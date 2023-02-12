@@ -21,7 +21,7 @@ pub(crate) use bevy::{
 
 use crate::post_processing::{DrawPostProcessingEffect, UniformBindGroup};
 
-use super::{PostProcessingPhaseItem, VfxOrdering};
+use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const CHROMATIC_ABERRATION_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 4357337502039082134);
@@ -94,7 +94,7 @@ fn prepare(
     mut views: Query<(
         Entity,
         &mut RenderPhase<PostProcessingPhaseItem>,
-        &VfxOrdering<ChromaticAberration>,
+        &Order<ChromaticAberration>,
     )>,
     draw_functions: Res<DrawFunctions<PostProcessingPhaseItem>>,
 ) {
