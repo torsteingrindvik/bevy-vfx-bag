@@ -34,7 +34,9 @@ fn hash21f(point: vec2<u32>) -> f32 {
     // https://www.pcg-random.org/using-pcg-c.html 
     // We get a random value in a u32's range.
     // Divide it by 1/2^32 to produce a value in the [0, 1) range.
-    return ldexp_workaround(f32(hash21(point)), -32.0);
+    // Then massage it to get the desired [-1, 1) range.
+    let noise = ldexp_workaround(f32(hash21(point)), -32.0);
+    return -1.0 + 2.0 * noise;
 }
 
 fn hash22(point: vec2<u32>) -> vec2<u32> {
@@ -42,5 +44,6 @@ fn hash22(point: vec2<u32>) -> vec2<u32> {
 }
 
 fn hash22f(point: vec2<u32>) -> vec2<f32> {
-    return ldexp_workaround2(vec2<f32>(hash22(point)), -32.0);
+    let noise = ldexp_workaround2(vec2<f32>(hash22(point)), -32.0);
+    return vec2(-1.0) + (2.0 * noise);
 }

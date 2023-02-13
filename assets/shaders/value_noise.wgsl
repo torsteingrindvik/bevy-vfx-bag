@@ -25,19 +25,3 @@ fn value_noise(coords: vec2<f32>) -> f32 {
 
     return noise;
 }
-
-struct CustomMaterial {
-    scale: f32,
-    offset_x: f32,
-    offset_y: f32,
-};
-
-@group(1) @binding(0)
-var<uniform> material: CustomMaterial;
-
-@fragment
-fn fragment(
-    #import bevy_pbr::mesh_vertex_output
-) -> @location(0) vec4<f32> {
-    return vec4<f32>(vec3(value_noise((material.scale * uv) + vec2(material.offset_x, material.offset_y))), 1.0);
-}
