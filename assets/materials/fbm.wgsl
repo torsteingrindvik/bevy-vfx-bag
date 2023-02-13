@@ -1,12 +1,12 @@
 #import bevy_vfx_bag::fbm
 
-struct CustomMaterial {
+struct Material {
     scale: f32,
     offset_x: f32,
     offset_y: f32,
 };
 @group(1) @binding(0)
-var<uniform> material: CustomMaterial;
+var<uniform> material: Material;
 
 @fragment
 fn fragment(
