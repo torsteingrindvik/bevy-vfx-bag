@@ -31,6 +31,7 @@ fn startup(
     mut fbm_materials: ResMut<Assets<Fbm>>,
     mut voronoi_materials: ResMut<Assets<Voronoi>>,
 ) {
+    /*
     // noise cubes
     for i in 1..=4 {
         let i = i as f32;
@@ -78,6 +79,16 @@ fn startup(
             ..default()
         });
     }
+     */
+
+    let uv = Uv { ..default() };
+
+    commands.spawn(MaterialMeshBundle {
+        mesh: meshes.add(Mesh::from(shape::Cube { size: 3.8 })),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        material: voronoi_materials.add(Voronoi { uv }),
+        ..default()
+    });
 
     // camera
     commands.spawn(Camera3dBundle {

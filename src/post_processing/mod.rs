@@ -166,7 +166,7 @@ pub(crate) fn render_pipeline_descriptor(
 ) -> RenderPipelineDescriptor {
     RenderPipelineDescriptor {
         label: Some(format!("{label} Render Pipeline").into()),
-        layout: Some(vec![shared_layout.clone(), uniform_layout.clone()]),
+        layout: vec![shared_layout.clone(), uniform_layout.clone()],
         vertex: fullscreen_shader_vertex_state(),
         primitive: PrimitiveState::default(),
         depth_stencil: None,
@@ -177,6 +177,7 @@ pub(crate) fn render_pipeline_descriptor(
             entry_point: "fragment".into(),
             targets: vec![Some(TextureFormat::bevy_default().into())],
         }),
+        push_constant_ranges: vec![],
     }
 }
 
