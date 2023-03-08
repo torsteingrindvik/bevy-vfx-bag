@@ -8,6 +8,7 @@ use bevy::render::{
         AddressMode, BindingResource, Sampler, SamplerBindingType, SamplerDescriptor,
         TextureSampleType, TextureViewDimension,
     },
+    texture::{CompressedImageFormats, ImageType},
     RenderSet,
 };
 pub(crate) use bevy::{
@@ -34,6 +35,8 @@ use super::{Order, PostProcessingPhaseItem};
 
 pub(crate) const RAINDROPS_SHADER_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3481202994982538867);
+const RAINDROPS_IMAGE_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Image::TYPE_UUID, 10600833861652934799);
 
 #[derive(Resource, ExtractResource, Deref, DerefMut, Clone)]
 struct RaindropsTextureHandle(Handle<Image>);
@@ -114,14 +117,28 @@ impl bevy::prelude::Plugin for Plugin {
             Shader::from_wgsl
         );
 
-        let asset_server = app.world.resource::<AssetServer>();
-        let texture_handle: Handle<Image> = asset_server.load("textures/raindrops.tga");
+        let mut assets = app.world.resource_mut::<Assets<_>>();
+
+        let image = Image::from_buffer(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/assets/textures/",
+                "raindrops.tga"
+            )),
+            ImageType::Extension("tga"),
+            CompressedImageFormats::NONE,
+            false,
+        )
+        .expect("Should load raindrops successfully");
+        assets.set_untracked(RAINDROPS_IMAGE_HANDLE, image);
 
         // This puts the uniform into the render world.
         app.add_plugin(ExtractComponentPlugin::<Raindrops>::default())
             .add_plugin(UniformComponentPlugin::<Raindrops>::default())
             .add_plugin(ExtractResourcePlugin::<RaindropsTextureHandle>::default())
-            .insert_resource(RaindropsTextureHandle(texture_handle));
+            .insert_resource(RaindropsTextureHandle(
+                RAINDROPS_IMAGE_HANDLE.clone_weak().typed(),
+            ));
 
         super::render_app(app)
             .add_system(
