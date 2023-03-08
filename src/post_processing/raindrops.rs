@@ -124,9 +124,9 @@ impl bevy::prelude::Plugin for Plugin {
             .insert_resource(RaindropsTextureHandle(texture_handle));
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Raindrops>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Raindrops>
+                    .in_schedule(ExtractSchedule),
             )
             .init_resource::<RaindropsData>()
             .init_resource::<UniformBindGroup<Raindrops>>()

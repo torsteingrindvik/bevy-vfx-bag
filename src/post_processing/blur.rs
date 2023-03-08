@@ -72,9 +72,8 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<Blur>::default());
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Blur>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Blur>.in_schedule(ExtractSchedule),
             )
             .init_resource::<BlurData>()
             .init_resource::<UniformBindGroup<Blur>>()

@@ -98,9 +98,8 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<Wave>::default());
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Wave>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Wave>.in_schedule(ExtractSchedule),
             )
             .init_resource::<WaveData>()
             .init_resource::<UniformBindGroup<Wave>>()

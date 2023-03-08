@@ -71,9 +71,8 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<FlipUniform>::default());
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Flip>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Flip>.in_schedule(ExtractSchedule),
             )
             .init_resource::<FlipData>()
             .init_resource::<UniformBindGroup<FlipUniform>>()

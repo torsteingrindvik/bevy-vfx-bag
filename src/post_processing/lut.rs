@@ -172,9 +172,8 @@ impl bevy::prelude::Plugin for Plugin {
             .add_system(adapt_image_for_lut_use.in_base_set(CoreSet::PostUpdate));
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Lut>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Lut>.in_schedule(ExtractSchedule),
             )
             .init_resource::<LutData>()
             .add_system(prepare.in_set(RenderSet::Prepare))
