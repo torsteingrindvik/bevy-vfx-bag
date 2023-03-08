@@ -141,7 +141,13 @@ mod shapes {
 
         // ground plane
         commands.spawn(PbrBundle {
-            mesh: meshes.add(shape::Plane { size: 50. }.into()),
+            mesh: meshes.add(
+                shape::Plane {
+                    size: 50.,
+                    ..default()
+                }
+                .into(),
+            ),
             material: materials.add(Color::SILVER.into()),
             ..default()
         });

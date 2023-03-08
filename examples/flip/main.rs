@@ -12,7 +12,7 @@ fn main() {
         .add_plugin(BevyVfxBagPlugin::default())
         .add_startup_system(startup)
         .add_system(examples_common::print_on_change::<Flip>)
-        .add_system_to_schedule(CoreSchedule::FixedUpdate, update)
+        .add_system(update.in_schedule(CoreSchedule::FixedUpdate))
         .insert_resource(FixedTime::new_from_secs(1.5))
         .run();
 }

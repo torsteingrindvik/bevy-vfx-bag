@@ -1,6 +1,6 @@
 use std::{f32::consts::PI, fmt::Display};
 
-use bevy::render::RenderSet;
+use bevy::render::{render_phase::AddRenderCommand, RenderSet};
 pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -10,7 +10,7 @@ pub(crate) use bevy::{
         extract_component::{
             ComponentUniforms, ExtractComponent, ExtractComponentPlugin, UniformComponentPlugin,
         },
-        render_phase::{AddRenderCommand, DrawFunctions, RenderPhase},
+        render_phase::{DrawFunctions, RenderPhase},
         render_resource::{
             BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry,
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
@@ -76,9 +76,8 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<ChromaticAberration>::default());
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<ChromaticAberration>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<ChromaticAberration>.in_schedule(ExtractSchedule),
             )
             .init_resource::<ChromaticAberrationData>()
             .init_resource::<UniformBindGroup<ChromaticAberration>>()

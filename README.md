@@ -24,10 +24,10 @@ When adding this crate as a dependency in your project,
 the Bevy version you use will need to match up according to the
 following table:
 
-|bevy-vfx-bag|bevy|
-|---|---|
-|0.2.0|main|
-|0.1.0|0.9.0|
+| bevy-vfx-bag | bevy   |
+| ------------ | ------ |
+| 0.2.0        | 0.10.0 |
+| 0.1.0        | 0.9.0  |
 
 ## Getting started
 
@@ -44,16 +44,17 @@ The general strategy is:
 fn main(){
   App::new()
     .add_plugins(DefaultPlugins)
-    .add_plugin(BevyVfxBagPlugin) // This needs to be added for any effect to work
+    .add_plugin(BevyVfxBagPlugin::default()) // This needs to be added for any effect to work
     .add_startup_system(setup)
     .add_system(update)
     .run();
 }
 
 fn setup(mut commands: Commands) {
-    commands
-        .spawn(Camera3dBundle { ... })
-        .insert(Blur::default());
+    commands.spawn((
+        Camera3dBundle { ... },
+        Blur::default()
+    ));
 }
 
 fn update(mut blur: Query<&mut Blur>) {

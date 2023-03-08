@@ -11,21 +11,8 @@ repository = "https://github.com/torsteingrindvik/bevy-vfx-bag"
 
 exclude = [".github/", "scripts/"]
 
-[features]
-# For local development.
-# Shaders can now be hot-reloaded.
-dev = []
-
 [dependencies]
-# bevy = { path = "../bevy-main", default-features = false, features = [
-#     "bevy_asset",
-#     "bevy_render",
-#     "bevy_core_pipeline",
-#     "png",
-#     "tga",
-# ] }
-
-bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
+bevy = { version = "0.10", default-features = false, features = [
     "bevy_asset",
     "bevy_render",
     "bevy_core_pipeline",
@@ -34,12 +21,7 @@ bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, f
 ] }
 
 [dev-dependencies]
-bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
-# bevy_mod_debugdump = "0.6.0"
-# bevy_mod_debugdump = { path = "../bevy_mod_debugdump" }
-# bevy = { path = "../bevy-main", features = ["tga"] }
-
+bevy = { version = "0.10", features = ["tga"] }
 color-eyre = "0.6"
 image = "0.24"
-
 once_cell = "1"

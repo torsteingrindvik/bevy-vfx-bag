@@ -76,9 +76,9 @@ impl bevy::prelude::Plugin for Plugin {
             .add_plugin(UniformComponentPlugin::<Pixelate>::default());
 
         super::render_app(app)
-            .add_system_to_schedule(
-                ExtractSchedule,
-                super::extract_post_processing_camera_phases::<Pixelate>,
+            .add_system(
+                super::extract_post_processing_camera_phases::<Pixelate>
+                    .in_schedule(ExtractSchedule),
             )
             .init_resource::<PixelateData>()
             .init_resource::<UniformBindGroup<Pixelate>>()
