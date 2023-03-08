@@ -3,7 +3,6 @@
 //! as the mapping in a LUT shader should not alter the image,
 //! except for rounding errors introduced due to the size of this
 //! LUT being finite.
-
 use color_eyre::Result;
 use image::{codecs::png::PngEncoder, ColorType, ImageEncoder};
 
@@ -60,6 +59,8 @@ fn main() -> Result<()> {
     let lut = make_lut();
 
     encoder.write_image(&lut, WIDTH, HEIGHT, ColorType::Rgb8)?;
+
+    println!("File `lut.png` was created! Edit the colors of this file and load it as a LUT. See the LUT example.");
 
     Ok(())
 }
