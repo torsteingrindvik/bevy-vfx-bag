@@ -53,6 +53,14 @@ impl ShapesExamplePlugin {
     }
 }
 
+impl Default for ShapesExamplePlugin {
+    fn default() -> Self {
+        Self {
+            add_3d_camera_bundle: true,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub(crate) struct ShouldAdd3dCameraBundle(bool);
 

@@ -12,7 +12,7 @@ repository = "https://github.com/torsteingrindvik/bevy-vfx-bag"
 exclude = [".github/", "scripts/"]
 
 [dependencies]
-bevy = { version = "0.10", default-features = false, features = [
+bevy = { git = "https://github.com/bevyengine/bevy", default-features = false, features = [
     "bevy_asset",
     "bevy_render",
     "bevy_core_pipeline",
@@ -21,7 +21,7 @@ bevy = { version = "0.10", default-features = false, features = [
 ] }
 
 [dev-dependencies]
-bevy = { version = "0.10", features = ["tga"] }
+bevy = { git = "https://github.com/bevyengine/bevy", features = ["tga"] }
 color-eyre = "0.6"
 image = "0.24"
 once_cell = "1"
