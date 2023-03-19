@@ -37,7 +37,7 @@ fn setup(
 
     commands.spawn(MaterialMesh2dBundle {
         mesh: Mesh2dHandle(meshes.add(hearts_quad_1.into())),
-        material: materials.add(HeartMaterial::new(Color::RED, 256., 6)),
+        material: materials.add(HeartMaterial::new(Color::RED, 200., 6)),
         transform: hearts_transform_1,
         ..default()
     });
@@ -343,19 +343,33 @@ fn update_heart_materials(
 
 fn update_heart_quads(
     // TODO: Changed
-    query: Query<(&Handle<HeartMaterial>, &Mesh2dHandle)>,
+    mut query: Query<(&Handle<HeartMaterial>, &Mesh2dHandle, &mut Transform)>,
     hearts: Res<Assets<HeartMaterial>>,
     mut quads: ResMut<Assets<Mesh>>,
+    windows: Query<&Window>,
 ) {
-    for (heart_handle, mesh_handle) in query.iter() {
+    for (heart_handle, mesh_handle, mut transform) in query.iter_mut() {
         if let Some(heart_material) = hearts.get(heart_handle) {
             let mesh = quads.get_mut(&mesh_handle.0).unwrap();
 
-            *mesh = shape::Quad::new(Vec2::new(
+            let size = Vec2::new(
                 heart_material.size * heart_material.num_hearts,
                 heart_material.size,
-            ))
-            .into();
+            );
+            let half = size / 2.;
+
+            *mesh = shape::Quad::new(size).into();
+
+            let window = windows.single();
+
+            let top_left = Vec2::new(
+                -(window.physical_width() as f32 / 2.),
+                window.physical_height() as f32 / 2.,
+            );
+
+            let pos = top_left + Vec2::new(half.x, -half.y);
+
+            *transform = Transform::from_xyz(pos.x, pos.y, 0.0);
         }
     }
 }
