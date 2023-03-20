@@ -8,7 +8,7 @@ mod examples_common;
 
 use bevy::{
     core_pipeline::clear_color::ClearColorConfig,
-    prelude::{shape::Quad, *},
+    prelude::*,
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle},
@@ -37,7 +37,7 @@ fn setup(
 
     commands.spawn(MaterialMesh2dBundle {
         mesh: Mesh2dHandle(meshes.add(hearts_quad_1.into())),
-        material: materials.add(HeartMaterial::new(Color::RED, 200., 6)),
+        material: materials.add(HeartMaterial::new(Color::RED, 50., 6)),
         transform: hearts_transform_1,
         ..default()
     });
@@ -129,6 +129,7 @@ impl HeartData {
 
 #[derive(Debug, Clone, Default, Copy)]
 struct HeartSettings {
+    // Todo: Make stack?
     transition: Option<Transition>,
 }
 
@@ -138,8 +139,12 @@ pub struct HeartMaterial<const N: usize = 32> {
     #[uniform(0)]
     color: Color,
 
+    // how many hearts there should be room for in the quad
     #[uniform(1)]
-    num_hearts: f32,
+    active_hearts: f32,
+
+    // how many hearts there are logically
+    target_num_hearts: usize,
 
     #[uniform(2)]
     mouse: Vec2,
@@ -204,9 +209,9 @@ impl<const N: usize> HeartMaterial<N> {
 
         Self {
             color,
-            num_hearts: num_hearts as f32,
+            active_hearts: num_hearts as f32,
+            target_num_hearts: num_hearts,
             mouse: Default::default(),
-            // interp: Default::default(),
             hearts,
             heart_settings: [Default::default(); N],
             size,
@@ -214,36 +219,46 @@ impl<const N: usize> HeartMaterial<N> {
     }
 
     pub fn add_heart(&mut self, settings: TransitionSettings) {
-        let num = self.num_hearts as usize;
+        let num = self.target_num_hearts;
 
         if num == 32 {
             eprintln!("Too many");
             return;
         }
 
-        let (heart_settings, data) = (&mut self.heart_settings[num], &mut self.hearts[num]);
+        let heart_settings = &mut self.heart_settings[num];
+
+        let previous_transition_percentage = heart_settings
+            .transition
+            .map(|hs| hs.transition_percentage)
+            .unwrap_or(0.0);
 
         heart_settings.transition = Some(Transition {
             transitioning_in: true,
-            transition_percentage: 0.0,
+            transition_percentage: previous_transition_percentage,
             settings,
         });
 
-        *data = HeartData::transition_to_percentage(settings.style, 0.0);
+        // *data = HeartData::transition_to_percentage(settings.style, 0.0);
 
-        self.num_hearts += 1.;
+        self.target_num_hearts += 1;
     }
 
     pub fn remove_heart(&mut self, settings: TransitionSettings) {
-        let num = self.num_hearts as usize;
+        let num = self.target_num_hearts;
 
         if num == 0 {
             eprintln!("Too few");
             return;
         }
 
-        self.num_hearts -= 1.;
-        let heart_settings = &mut self.heart_settings[num];
+        self.target_num_hearts -= 1;
+
+        // Example: num was 1, how many hearts we had active.
+        // We want to change the transition on that element.
+        // That heart's settings lives in index 0.
+        // Therefore we subtract first, then index the settings.
+        let heart_settings = &mut self.heart_settings[self.target_num_hearts];
 
         let previous_transition_percentage = heart_settings
             .transition
@@ -255,6 +270,18 @@ impl<const N: usize> HeartMaterial<N> {
             transition_percentage: previous_transition_percentage,
             settings,
         });
+    }
+
+    // The number of hearts, plus any hearts with active transitions.
+    fn active_hearts(&self) -> usize {
+        let n = self.target_num_hearts;
+
+        self.heart_settings
+            .iter()
+            .skip(n)
+            .take_while(|hs| hs.transition.is_some())
+            .count()
+            + n
     }
 }
 
@@ -322,10 +349,10 @@ fn update_heart_materials(
                     };
 
                     let ease = curve.ease(transition.transition_percentage);
-                    println!(
-                        "Updating index {index} to {ease:.4} ({:.4})",
-                        transition.transition_percentage
-                    );
+                    // println!(
+                    //     "Updating index {index} to {ease:.4} ({:.4})",
+                    //     transition.transition_percentage
+                    // );
 
                     hearts[index] =
                         HeartData::transition_to_percentage(transition.settings.style, ease);
@@ -337,6 +364,8 @@ fn update_heart_materials(
                     }
                 }
             }
+
+            heart_material.active_hearts = heart_material.active_hearts() as f32;
         }
     }
 }
@@ -353,7 +382,7 @@ fn update_heart_quads(
             let mesh = quads.get_mut(&mesh_handle.0).unwrap();
 
             let size = Vec2::new(
-                heart_material.size * heart_material.num_hearts,
+                heart_material.size * heart_material.active_hearts() as f32,
                 heart_material.size,
             );
             let half = size / 2.;
