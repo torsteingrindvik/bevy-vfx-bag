@@ -23,23 +23,23 @@ struct HeartData {
 @group(1) @binding(3)
 var<uniform> heart_data: array<HeartData, 32>;
 
-fn heart(
-	uv: vec2<f32>
-) -> f32 {
-	let width = view.viewport.z;
-	let height = view.viewport.w;
+// fn heart(
+// 	uv: vec2<f32>
+// ) -> f32 {
+// 	let width = view.viewport.z;
+// 	let height = view.viewport.w;
 	
-	// Range (-1., 1.) and aspect ratio corrected
-	var uv = 2. * (-0.5 + uv) * vec2(width / height, 1.);
+// 	// Range (-1., 1.) and aspect ratio corrected
+// 	var uv = 2. * (-0.5 + uv) * vec2(width / height, 1.);
 
-	uv.y -= 0.2;
-	uv.y += 0.7 * sqrt(abs(uv.x));
-	uv *= vec2(0.8, 1.5);
+// 	uv.y -= 0.2;
+// 	uv.y += 0.7 * sqrt(abs(uv.x));
+// 	uv *= vec2(0.8, 1.5);
 
-	let d = smoothstep(1.0, 0.99, length(uv));
+// 	let d = smoothstep(1.0, 0.99, length(uv));
 
-	return d;
-}
+// 	return d;
+// }
 
 // @fragment
 // fn fragment(
@@ -98,10 +98,6 @@ fn repeat2(p: vec2<f32>, factor: vec2<f32>) -> vec2<f32> {
 }
 
 fn ball(p: vec3<f32>, radius: f32) -> f32 {
-	// var p = vec3(p.x, p.y / 2., p.z + 1.3 * abs(p.x));
-
-	// let s = abs(p / 1.1);
-
 	return length(p) - radius;
 }
 
@@ -109,6 +105,25 @@ fn abschill(v: f32) -> f32 {
 	// When v is big the extra term is negligible.
 	// When v is small it smooths it out.
 	return sqrt(v*v + 0.005);
+}
+
+
+fn heart(p: vec3<f32>, radius: f32) -> f32 {
+	var p = p;
+
+	p.x *= 0.56;
+
+	p.z = p.z * 1.;
+
+	p.x = abschill(p.x);
+	p.y -= p.x * sqrt((8. - p.x) / 20.);
+
+	p.y *= 1.3;
+	p.y -= 0.5;
+
+
+
+	return ball(p, radius);
 }
 
 fn map(p: vec3<f32>) -> vec2<f32> {
@@ -128,19 +143,20 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	// 	THING,
 	// );
 
-	let height = 0.4;
-	let y = sqrt(max(0.0, p.y)) - 0.2;
+	// let height = 0.4;
+	// let y = sqrt(max(0.0, p.y)) - 0.2;
 
 	var res = vec2(
-		ball(vec3(abschill(p.x * 0.8) - y * 0.5, -height + p.y * 0.8, p.z), 0.3),
+		// ball(vec3(abschill(p.x * 0.8) - y * 0.5, -height + p.y * 0.8, p.z), 0.3),
+		heart(p, 0.8),
 		THING
 	);
 
 	// floor
-	let fl = 0.1 + p.y;
-	if (fl < res.x) {
-		// res = vec2(fl, FLOOR);
-	};
+	// let fl = 0.1 + p.y;
+	// if (fl < res.x) {
+	// 	// res = vec2(fl, FLOOR);
+	// };
 
 	return res;
 }
@@ -160,9 +176,9 @@ fn ray_march(
 	ro: vec3<f32>,
 	rd: vec3<f32>,
 ) -> vec2<f32> {
-	let eps = 1e-3;
+	let eps = 1e-5;
 
-	var t = 0.5;
+	var t = 1.0;
 	let t_max = 20.0;
 
 	var res = vec2(-1.);
@@ -217,12 +233,14 @@ fn fragment(
 	let pi = 3.1415;
 
 	// let angle = 0.1 * sin(globals.time * 5.) + 1.2 + mouse.x;
+	// let angle = (1.2 + mouse.x * 10.) % (pi * 2.);
 	let angle = (1. - hd.angle) * pi + 1.4;
 
 	let r = 2.4;
 
 	let ta = vec3(0., 0.65, 0.4);
 	let ro = ta + vec3(r * cos(angle), -0.2, r * sin(angle));
+	// let ro = vec3(r * cos(angle), -0.2, r * sin(angle));
 
 	let lo = vec3(1., 1., 1.);
 	// light: direction is towards sun as seen from target
@@ -237,7 +255,8 @@ fn fragment(
 	let cam_up = normalize(cross(cam_right, cam_look));
 
 	// let zoom = 1.8 + 3. * interp;
-	let zoom = hd.scale * 4.0;
+	// let zoom = hd.scale * 4.0;
+	let zoom = hd.scale * 2.0;
 
 	// p = repeat2(p, vec2(2., 2.));
 
@@ -256,16 +275,21 @@ fn fragment(
 	var a = 0.0;
 
 	if (t > 0.0) {
-		if (id > THING) {
-			col = vec3(0.8, 0.02, 0.02);
+		let point = ro + rd * t;
+		let n = normal(point);
 
-			a = hd.opacity;
+		if (id > THING) {
+			// col = vec3(0.8, 0.02, 0.02);
+			col = color.xyz;
+
+			a = pow(hd.opacity, 6.);
+			
+			let fresnel = clamp(1.0 + dot(n, rd), 0.0, 1.0);
+			col = 0.4 * col + 0.8 * fresnel * col;
+
 		} else if (id > FLOOR) {
 			col = vec3(0.05, 0.09, 0.02);
 		}
-
-		let point = ro + rd * t;
-		let n = normal(point);
 
 		let sun_norm_alignment = max(0., dot(n, ld));
 
@@ -298,16 +322,19 @@ fn fragment(
 		// the geometry is to the sky.
 		light_in += vec3(0.5, 0.7, 1.) * sky_factor;
 
-		light_in += vec3(0.4, 1., 0.4) * bottom_up_factor;
+		light_in += vec3(0.4, 1., 0.4) * bottom_up_factor * 1.5;
 
 		// now everything is scaled by this..
-		col *= light_in;
+		col *= light_in * 0.3;
 
 		// specular comes in last?
-		col += sun_color * specular * sun_unobstructed;
+		col += sun_color * specular * sun_unobstructed * 0.08;
+
+		// col = colfresnel;
 
 
-		col = mix(col, vec3(0.5, 0.6, 0.9), 1. - exp(-0.0001 * t * t * t));
+		// fog effect
+		// col = mix(col, vec3(0.5, 0.6, 0.9), 1. - exp(-0.0001 * t * t * t));
 
 		// col = vec3(bottom_up_factor);
 		// a = 1.0;

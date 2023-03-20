@@ -8,7 +8,7 @@ mod examples_common;
 
 use bevy::{
     core_pipeline::clear_color::ClearColorConfig,
-    prelude::*,
+    prelude::{shape::Quad, *},
     reflect::TypeUuid,
     render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
     sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle},
@@ -32,15 +32,44 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<HeartMaterial>>,
 ) {
-    let hearts_quad_1 = shape::Quad::default();
-    let hearts_transform_1 = Transform::from_xyz(0., 0., 0.);
+    let size = 180.;
 
-    commands.spawn(MaterialMesh2dBundle {
-        mesh: Mesh2dHandle(meshes.add(hearts_quad_1.into())),
-        material: materials.add(HeartMaterial::new(Color::RED, 50., 6)),
-        transform: hearts_transform_1,
-        ..default()
-    });
+    for (idx, color) in [Color::RED, Color::LIME_GREEN, Color::BEIGE]
+        .iter()
+        .enumerate()
+    {
+        commands.spawn(MaterialMesh2dBundle {
+            material: materials.add(HeartMaterial::new(
+                *color,
+                size,
+                6,
+                Vec2::new(5., -5. - size * (idx as f32 * 0.8)),
+            )),
+            mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
+            ..default()
+        });
+    }
+
+    // commands.spawn(MaterialMesh2dBundle {
+    //     material: materials.add(HeartMaterial::new(
+    //         Color::GREEN,
+    //         100.,
+    //         6,
+    //         Vec2::new(5., -105.),
+    //     )),
+    //     mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
+    //     ..default()
+    // });
+    // commands.spawn(MaterialMesh2dBundle {
+    //     material: materials.add(HeartMaterial::new(
+    //         Color::BLUE,
+    //         100.,
+    //         6,
+    //         Vec2::new(5., -205.),
+    //     )),
+    //     mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
+    //     ..default()
+    // });
 
     // let hearts_quad_2 = shape::Quad::new(Vec2::new(
     //     (window.physical_width() / 10) as f32,
@@ -156,6 +185,9 @@ pub struct HeartMaterial<const N: usize = 32> {
     heart_settings: [HeartSettings; N],
 
     size: f32,
+
+    // screen space position, anchored at quad's top left corner
+    position: Vec2,
 }
 
 #[derive(Debug, Clone, Default, Copy)]
@@ -193,7 +225,7 @@ impl Transition {
 }
 
 impl<const N: usize> HeartMaterial<N> {
-    pub fn new(color: Color, size: f32, num_hearts: usize) -> Self {
+    pub fn new(color: Color, size: f32, num_hearts: usize, position: Vec2) -> Self {
         assert!(num_hearts <= 32);
 
         let mut hearts = [Default::default(); N];
@@ -215,6 +247,7 @@ impl<const N: usize> HeartMaterial<N> {
             hearts,
             heart_settings: [Default::default(); N],
             size,
+            position,
         }
     }
 
@@ -392,11 +425,13 @@ fn update_heart_quads(
             let window = windows.single();
 
             let top_left = Vec2::new(
+                // positive right
                 -(window.physical_width() as f32 / 2.),
+                // positive up
                 window.physical_height() as f32 / 2.,
             );
 
-            let pos = top_left + Vec2::new(half.x, -half.y);
+            let pos = top_left + Vec2::new(half.x, -half.y) + heart_material.position;
 
             *transform = Transform::from_xyz(pos.x, pos.y, 0.0);
         }
@@ -408,49 +443,50 @@ fn update_keyboard(
     query: Query<&Handle<HeartMaterial>>,
     mut hearts: ResMut<Assets<HeartMaterial>>,
 ) {
-    let heart_handle = query.single();
-    let heart_material = hearts.get_mut(heart_handle).unwrap();
-    let speed = 0.8;
+    for heart_handle in query.iter() {
+        let heart_material = hearts.get_mut(heart_handle).unwrap();
+        let speed = 0.8;
 
-    if keyboard_input.just_pressed(KeyCode::Q) {
-        heart_material.add_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Instant,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::W) {
-        heart_material.add_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Fade,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::E) {
-        heart_material.add_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Scale,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::R) {
-        heart_material.add_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Spin,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::A) {
-        heart_material.remove_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Instant,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::S) {
-        heart_material.remove_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Fade,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::D) {
-        heart_material.remove_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Scale,
-        });
-    } else if keyboard_input.just_pressed(KeyCode::F) {
-        heart_material.remove_heart(TransitionSettings {
-            speed,
-            style: TransitionStyle::Spin,
-        });
+        if keyboard_input.just_pressed(KeyCode::Q) {
+            heart_material.add_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Instant,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::W) {
+            heart_material.add_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Fade,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::E) {
+            heart_material.add_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Scale,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::R) {
+            heart_material.add_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Spin,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::A) {
+            heart_material.remove_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Instant,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::S) {
+            heart_material.remove_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Fade,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::D) {
+            heart_material.remove_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Scale,
+            });
+        } else if keyboard_input.just_pressed(KeyCode::F) {
+            heart_material.remove_heart(TransitionSettings {
+                speed,
+                style: TransitionStyle::Spin,
+            });
+        }
     }
 }
