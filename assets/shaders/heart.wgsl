@@ -55,12 +55,24 @@ var<uniform> heart_data: array<HeartData, 32>;
 const FLOOR: f32 = 1.0;
 const THING: f32 = 2.0;
 
+fn sd_u(object_1: f32, object_2: f32, k: f32) -> f32 {
+	let h = max(k - abs(object_1 - object_2), 0.0) / k;
+	return min(object_1, object_2) - h * h * k * (1./4.);
+}
+
 // https://iquilezles.org/articles/smin/
 fn op_union(object_1: f32, object_2: f32) -> f32 {
-	let k = 0.13;
-	let h = max(k - abs(object_1 - object_2), 0.0) / k;
+	return sd_u(object_1, object_2, 0.13);
+}
 
-	return min(object_1, object_2) - h * h * k * (1./4.);
+fn sd_capsule_x(p: vec3<f32>, h: f32, r: f32) -> f32
+{
+	var p = p;
+	// center
+	p.x += h / 2.;
+  	p.x -= clamp(p.x, 0.0, h);
+
+  	return length(p) - r;
 }
 
 // fn box(p: vec3<f32>, b: vec3<f32>) -> f32 {
@@ -79,6 +91,18 @@ fn op_union(object_1: f32, object_2: f32) -> f32 {
 // 	// let p = vec3(p.x, py, p.z * (1. - (posy / 10.)));
 
 // 	return length(p + 0.2) - radius;
+// }
+
+fn repeat(p: f32, factor: f32) -> vec2<f32> {
+	let scaled = p / factor;
+	let idx = floor(scaled);
+
+	return vec2((p - factor * idx) - 0.5 * factor, floor(scaled));
+}
+
+// fn repeat(p: f32, factor: f32) -> vec2<f32> {
+//     let q = (p % factor) - 0.5 * factor;
+//     return vec2(q, p % factor);
 // }
 
 // fn repeat_xz(p: vec3<f32>, factor: vec2<f32>) -> vec3<f32> {
@@ -192,6 +216,38 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 
 	return res;
 }
+#else ifdef BVB_UI_UNDECIDED
+fn map(p: vec3<f32>) -> vec2<f32> {
+
+	// let ry = repeat(p.y, 0.4);
+	// let an = globals.time + ry.y * 2.5;
+	let an = globals.time + 2.5;
+
+	let h = 1.0;
+	let hh = h / 2.;
+
+	let rotated = mat2x2(
+		cos(an), -sin(an),
+		sin(an), cos(an),
+	) * p.xz;
+	// let rotated = p.xz;
+
+	let q = vec3(
+		rotated.x,
+		p.y + 0.2 * sin(globals.time * 3.),
+		// p.y + 0.4,
+		// ry.x,
+		rotated.y,
+	);
+
+	var d1 = sd_capsule_x(q, h, 0.10);
+
+	var res = vec2(
+		d1,
+		THING
+	);
+	return res;
+}
 #endif
 
 // iq
@@ -231,7 +287,7 @@ fn ao(p: vec3<f32>, n: vec3<f32>) -> f32
 
 
 fn normal(p: vec3<f32>) -> vec3<f32> {
-	let eps = vec3(0.0001, 0., 0.);
+	let eps = vec3(0.001, 0., 0.);
 
 	return normalize(vec3(
 		map(p + eps.xyy).x - map(p - eps.xyy).x,
@@ -245,10 +301,10 @@ fn ray_march(
 	ro: vec3<f32>,
 	rd: vec3<f32>,
 ) -> vec2<f32> {
-	let eps = 1e-5;
+	let eps = 1e-3;
 
 	var t = 0.1;
-	let t_max = 10.0;
+	let t_max = 20.0;
 
 	var res = vec2(-1.);
 
@@ -303,7 +359,8 @@ fn fragment(
 	let pi = 3.1415;
 	let pi2 = pi * 2.;
 
-	let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * sin(globals.time * 3.));
+	// let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * sin(globals.time * 3.));
+	let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * globals.time * 3.);
 
 	let r = 1.0;
 
@@ -394,16 +451,16 @@ fn fragment(
 
 
 
-		/*
+		// /*
 		// TODO: Maybe make a debug flag or something?
 		if (idx < 1u) {
 			col = vec3(ambient_occ);
 		} else if idx < 2u {
 			col = vec3(n);
 		}
-		 */
+		//  */
 	}
 
-    // return vec4(col + vec3(p, 0.)*0.1, max(a, 0.5));
+    // return vec4(col + vec3(p, 0.)*0.01, max(a, 0.2));
     return vec4(col, a);
 }

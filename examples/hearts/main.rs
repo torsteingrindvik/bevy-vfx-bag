@@ -43,12 +43,12 @@ fn setup(
     for (idx, (color, variant)) in [
         (Color::RED, HeartMaterialKey::Heart),
         (Color::BLUE, HeartMaterialKey::Heart),
-        // (Color::, HeartMaterialKey::Ball),
         (Color::BLACK, HeartMaterialKey::Ball),
         (Color::PINK, HeartMaterialKey::Bone),
         (Color::WHITE, HeartMaterialKey::Bone),
         (Color::LIME_GREEN, HeartMaterialKey::Hat),
         (Color::TURQUOISE, HeartMaterialKey::Hat),
+        (Color::AZURE, HeartMaterialKey::Undecided),
     ]
     .iter()
     .enumerate()
@@ -154,6 +154,7 @@ pub enum HeartMaterialKey {
     Ball,
     Bone,
     Hat,
+    Undecided,
 }
 
 impl HeartMaterialKey {
@@ -163,6 +164,7 @@ impl HeartMaterialKey {
             HeartMaterialKey::Ball => "BVB_UI_BALL",
             HeartMaterialKey::Bone => "BVB_UI_BONE",
             HeartMaterialKey::Hat => "BVB_UI_HAT",
+            HeartMaterialKey::Undecided => "BVB_UI_UNDECIDED",
         }
         .into()
     }
