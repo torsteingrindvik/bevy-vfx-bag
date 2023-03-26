@@ -81,85 +81,154 @@ fn op_union(object_1: f32, object_2: f32) -> f32 {
 // 	return length(p + 0.2) - radius;
 // }
 
-fn repeat_xz(p: vec3<f32>, factor: vec2<f32>) -> vec3<f32> {
-	let tmp = vec2(
-        p.x - factor.x * floor(p.x/factor.x),
-        p.z - factor.y * floor(p.z/factor.y)
-    ) - 0.5 * factor;
+// fn repeat_xz(p: vec3<f32>, factor: vec2<f32>) -> vec3<f32> {
+// 	let tmp = vec2(
+//         p.x - factor.x * floor(p.x/factor.x),
+//         p.z - factor.y * floor(p.z/factor.y)
+//     ) - 0.5 * factor;
     
-	return vec3(tmp.x, p.y, tmp.y);
-}
+// 	return vec3(tmp.x, p.y, tmp.y);
+// }
 
-fn repeat2(p: vec2<f32>, factor: vec2<f32>) -> vec2<f32> {
-	return vec2(
-        p.x - factor.x * floor(p.x/factor.x),
-        p.y - factor.y * floor(p.y/factor.y)
-    ) - 0.5 * factor;
-}
+// fn repeat2(p: vec2<f32>, factor: vec2<f32>) -> vec2<f32> {
+// 	return vec2(
+//         p.x - factor.x * floor(p.x/factor.x),
+//         p.y - factor.y * floor(p.y/factor.y)
+//     ) - 0.5 * factor;
+// }
 
 fn ball(p: vec3<f32>, radius: f32) -> f32 {
 	return length(p) - radius;
 }
 
+fn sabs(v: f32, k: f32) -> f32 {
+	return sqrt(v*v + k);
+}
+
 fn abschill(v: f32) -> f32 {
 	// When v is big the extra term is negligible.
 	// When v is small it smooths it out.
-	return sqrt(v*v + 0.005);
+	return sabs(v, 0.005);
 }
 
 
 fn heart(p: vec3<f32>, radius: f32) -> f32 {
 	var p = p;
 
-	p.x *= 0.56;
+	p.x *= 0.90;
 
-	p.z = p.z * 1.;
-
-	p.x = abschill(p.x);
-	p.y -= p.x * sqrt((8. - p.x) / 20.);
-
-	p.y *= 1.3;
-	p.y -= 0.5;
-
-
+	p.x = sabs(p.x, 0.004);
+	p.y -= p.x * sqrt((9. - p.x) / 10.);
+	p.y += 0.1;
 
 	return ball(p, radius);
 }
 
+// iq
+fn smax(a: f32, b: f32, k: f32) -> f32 {
+	let h = max(k - abs(a - b), 0.);
+	return max(a, b) + h * h * 0.25 / k;
+}
+
+#ifdef BVB_UI_HEART
 fn map(p: vec3<f32>) -> vec2<f32> {
-	let t = 0.;
-
-	// var p = repeat_xz(p, vec2(5., 5.));
-	// p.y *= 0.8;
-
-	// let p = vec3(
-	// 	abschill(p.x) % 2.0,
-	// 	p.y,
-	// 	abschill(p.z) % 2.0
-	// );
-
-	// var res = vec2(
-	// 	ball(p - vec3(0., 1.2, 0.), 0.2),
-	// 	THING,
-	// );
-
-	// let height = 0.4;
-	// let y = sqrt(max(0.0, p.y)) - 0.2;
-
 	var res = vec2(
-		// ball(vec3(abschill(p.x * 0.8) - y * 0.5, -height + p.y * 0.8, p.z), 0.3),
-		heart(p, 0.8),
+		heart(p, 0.5),
 		THING
 	);
 
-	// floor
-	// let fl = 0.1 + p.y;
-	// if (fl < res.x) {
-	// 	// res = vec2(fl, FLOOR);
-	// };
+	return res;
+}
+#else ifdef BVB_UI_BALL
+fn map(p: vec3<f32>) -> vec2<f32> {
+	var res = vec2(
+		ball(p, 0.5),
+		THING
+	);
 
 	return res;
 }
+#else ifdef BVB_UI_BONE
+fn map(p: vec3<f32>) -> vec2<f32> {
+	var p = p * 0.6;
+	p.x = abs(p.x);
+	p.y = sabs(p.y, 0.0001);
+
+	var d1 = length(p - vec3(0.3, 0.1, 0.)) - 0.1;
+
+	p.x *= 0.4;
+	d1 = op_union(
+		d1,
+		ball(p, 0.08),
+	);
+
+	var res = vec2(
+		d1,
+		THING
+	);
+
+	return res;
+}
+#else ifdef BVB_UI_HAT
+fn map(p: vec3<f32>) -> vec2<f32> {
+
+	// Chop off a ball to get a smooth midsection
+	var d1 = ball(p, 0.6);
+	d1 = smax(d1, abs(p.y) - 0.04, 0.03);
+
+	// let w = -1.3 + sqrt(length(p.xz)) * 5.;
+	let w = 1.;
+
+	d1 = op_union(
+		d1,	
+		length(p.xz) - 0.60 + sqrt(p.y * 0.45),
+		// ball(vec3(abschill(p.x) + max(0.0, p.y * 0.4), p.y - 0.4, abs(p.z) + max(0.0, p.y * 0.4)), 0.45)
+	);
+
+	var res = vec2(
+		d1,
+		THING
+	);
+
+	return res;
+}
+#endif
+
+// iq
+fn hash1(n: f32) -> f32
+{
+    return fract(sin(n)*813851.838134);
+}
+
+// iq
+fn forward_sf(i: f32, n: f32) -> vec3<f32>
+{
+    let PI  = 3.141592653589793238;
+    let PHI = 1.618033988749894848;
+    let phi = 2.0*PI*fract(i/PHI);
+    let zi = 1.0 - (2.0*i+1.0)/n;
+    let sinTheta = sqrt( 1.0 - zi*zi);
+    return vec3( cos(phi)*sinTheta, sin(phi)*sinTheta, zi);
+}
+
+// iq
+fn ao(p: vec3<f32>, n: vec3<f32>) -> f32
+{
+	var ao = 0.0;
+
+    for(var i: i32 = 0; i < 32; i++ )
+    {
+        var ap = forward_sf(f32(i), 32.0);
+
+        let h = hash1(f32(i));
+		ap *= sign( dot(ap, n) ) * h*0.1;
+        ao += clamp( map( p + n*0.01 + ap).x*3.0, 0.0, 1.0 );
+    }
+	ao /= 32.0;
+	
+    return clamp( ao*6.0, 0.0, 1.0 );
+}
+
 
 fn normal(p: vec3<f32>) -> vec3<f32> {
 	let eps = vec3(0.0001, 0., 0.);
@@ -178,8 +247,8 @@ fn ray_march(
 ) -> vec2<f32> {
 	let eps = 1e-5;
 
-	var t = 1.0;
-	let t_max = 20.0;
+	var t = 0.1;
+	let t_max = 10.0;
 
 	var res = vec2(-1.);
 
@@ -205,18 +274,19 @@ fn ray_march(
 fn uv2p(uv: vec2<f32>, view: View) -> vec3<f32> {
 	var uv = vec2(uv.x, 1.0 - uv.y);
 	uv.x *= num_hearts;
+
+	// each index
 	let uvxi = floor(uv.x);
 	uv.x = uv.x % 1.0;
-	// uv.y = uv.y * 4.8;
 
 	var p = (uv * 2.) - 1.;
 
+	// aspect ratio independent (assume width > height)
 	let width = view.viewport.z;
 	let height = view.viewport.w;
+	// p.x *= width / height;
 
-	// aspect ratio independent (assume width > height)
-	p.x *= width / height;
-
+	// TODO: Let's rather fix the model than the space?
 	return vec3(p, uvxi);
 }
 
@@ -231,21 +301,19 @@ fn fragment(
 	let hd = heart_data[idx];
 
 	let pi = 3.1415;
+	let pi2 = pi * 2.;
 
-	// let angle = 0.1 * sin(globals.time * 5.) + 1.2 + mouse.x;
-	// let angle = (1.2 + mouse.x * 10.) % (pi * 2.);
-	let angle = (1. - hd.angle) * pi + 1.4;
+	let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * sin(globals.time * 3.));
 
-	let r = 2.4;
+	let r = 1.0;
 
-	let ta = vec3(0., 0.65, 0.4);
-	let ro = ta + vec3(r * cos(angle), -0.2, r * sin(angle));
-	// let ro = vec3(r * cos(angle), -0.2, r * sin(angle));
+	let ta = vec3(0., 0., 0.);
+	let ro = ta + vec3(r * cos(angle), 0.4, r * sin(angle));
 
-	let lo = vec3(1., 1., 1.);
+	let lo = vec3(1., 3., 3.);
+
 	// light: direction is towards sun as seen from target
 	let ld = normalize(lo);
-	let light_color = vec3(0.6, 0.35, 0.5);
 
 	// camera looks from ro towards ta
 	let cam_look = normalize(-ro + ta);
@@ -254,41 +322,35 @@ fn fragment(
 	let cam_right = normalize(cross(cam_look, world_up));
 	let cam_up = normalize(cross(cam_right, cam_look));
 
-	// let zoom = 1.8 + 3. * interp;
-	// let zoom = hd.scale * 4.0;
-	let zoom = hd.scale * 2.0;
-
-	// p = repeat2(p, vec2(2., 2.));
+	let zoom = hd.scale;
 
 	let rd = normalize(p.x * cam_right + p.y * cam_up + zoom * cam_look);
-
 	let rm = ray_march(
 		ro,
 		rd,
 	);
+
 	let t = rm.x;
 	// Add a bit to avoid float comparison issues
 	let id = rm.y + 0.1;
 
-	// var col = vec3(0.0);
-	var col = vec3(0.4, 0.7, 0.9) - vec3(0.5) * max(p.y, 0.);
-	var a = 0.0;
+	var col = vec3(0.);
+	var a = 0.;
 
-	if (t > 0.0) {
+	if (t > 0.) {
 		let point = ro + rd * t;
 		let n = normal(point);
 
 		if (id > THING) {
-			// col = vec3(0.8, 0.02, 0.02);
 			col = color.xyz;
 
 			a = pow(hd.opacity, 6.);
 			
 			let fresnel = clamp(1.0 + dot(n, rd), 0.0, 1.0);
-			col = 0.4 * col + 0.8 * fresnel * col;
+			col = 0.5 * col + 0.4 * fresnel * col;
 
 		} else if (id > FLOOR) {
-			col = vec3(0.05, 0.09, 0.02);
+			col = vec3(1.);
 		}
 
 		let sun_norm_alignment = max(0., dot(n, ld));
@@ -299,12 +361,9 @@ fn fragment(
 		// 1.0 if can see sun directly,
 		// 0.0 else
 		let sun_unobstructed = step(ray_march(
-			point + 0.001 * n,
+			point + 0.1 * n,
 			ld,
 		).y, 0.);
-
-		let specular_alignment = max(0.0, dot(n, sun_half_vector));
-		let specular = pow(specular_alignment, 32.) * sun_norm_alignment;
 
 		let sky_factor = sqrt(clamp(0.5 + 0.5 * n.y, 0.0, 1.0));
 
@@ -320,27 +379,31 @@ fn fragment(
 
 		// add some color based on the sky, adjust amplitude by how aligned
 		// the geometry is to the sky.
-		light_in += vec3(0.5, 0.7, 1.) * sky_factor;
+		light_in += vec3(0.5, 0.7, 1.) * sky_factor * 1.;
 
-		light_in += vec3(0.4, 1., 0.4) * bottom_up_factor * 1.5;
+		light_in += vec3(0.4, 1., 0.4) * bottom_up_factor * 2.5;
 
-		// now everything is scaled by this..
-		col *= light_in * 0.3;
+		let ambient_occ = ao(point + n * 0.01, n);
+		col *= light_in * 0.20;
+		col *= ambient_occ;
 
-		// specular comes in last?
-		col += sun_color * specular * sun_unobstructed * 0.08;
+		// specular
+		let specular_alignment = max(0.0, dot(n, sun_half_vector));
+		let specular = pow(specular_alignment, 16.) * sun_norm_alignment;
+		col += sun_color * specular * sun_unobstructed * 0.05;
 
-		// col = colfresnel;
 
 
-		// fog effect
-		// col = mix(col, vec3(0.5, 0.6, 0.9), 1. - exp(-0.0001 * t * t * t));
-
-		// col = vec3(bottom_up_factor);
-		// a = 1.0;
-		// a = heart_data[u32(idx)].opacity;
+		/*
+		// TODO: Maybe make a debug flag or something?
+		if (idx < 1u) {
+			col = vec3(ambient_occ);
+		} else if idx < 2u {
+			col = vec3(n);
+		}
+		 */
 	}
 
+    // return vec4(col + vec3(p, 0.)*0.1, max(a, 0.5));
     return vec4(col, a);
-    // return vec4(col, 1.);
 }

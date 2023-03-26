@@ -10,8 +10,14 @@ use bevy::{
     core_pipeline::clear_color::ClearColorConfig,
     prelude::{shape::Quad, *},
     reflect::TypeUuid,
-    render::render_resource::{AsBindGroup, ShaderRef, ShaderType},
-    sprite::{Material2d, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle},
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderDefVal, ShaderRef, ShaderType,
+            SpecializedMeshPipelineError,
+        },
+    },
+    sprite::{Material2d, Material2dKey, Material2dPlugin, MaterialMesh2dBundle, Mesh2dHandle},
 };
 
 fn main() {
@@ -32,11 +38,20 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<HeartMaterial>>,
 ) {
-    let size = 180.;
+    let size = 280.;
 
-    for (idx, color) in [Color::RED, Color::LIME_GREEN, Color::BEIGE]
-        .iter()
-        .enumerate()
+    for (idx, (color, variant)) in [
+        (Color::RED, HeartMaterialKey::Heart),
+        (Color::BLUE, HeartMaterialKey::Heart),
+        // (Color::, HeartMaterialKey::Ball),
+        (Color::BLACK, HeartMaterialKey::Ball),
+        (Color::PINK, HeartMaterialKey::Bone),
+        (Color::WHITE, HeartMaterialKey::Bone),
+        (Color::LIME_GREEN, HeartMaterialKey::Hat),
+        (Color::TURQUOISE, HeartMaterialKey::Hat),
+    ]
+    .iter()
+    .enumerate()
     {
         commands.spawn(MaterialMesh2dBundle {
             material: materials.add(HeartMaterial::new(
@@ -44,54 +59,12 @@ fn setup(
                 size,
                 6,
                 Vec2::new(5., -5. - size * (idx as f32 * 0.8)),
+                *variant,
             )),
             mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
             ..default()
         });
     }
-
-    // commands.spawn(MaterialMesh2dBundle {
-    //     material: materials.add(HeartMaterial::new(
-    //         Color::GREEN,
-    //         100.,
-    //         6,
-    //         Vec2::new(5., -105.),
-    //     )),
-    //     mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
-    //     ..default()
-    // });
-    // commands.spawn(MaterialMesh2dBundle {
-    //     material: materials.add(HeartMaterial::new(
-    //         Color::BLUE,
-    //         100.,
-    //         6,
-    //         Vec2::new(5., -205.),
-    //     )),
-    //     mesh: Mesh2dHandle(meshes.add(Quad::default().into())),
-    //     ..default()
-    // });
-
-    // let hearts_quad_2 = shape::Quad::new(Vec2::new(
-    //     (window.physical_width() / 10) as f32,
-    //     (window.physical_height() / 4) as f32,
-    // ));
-    // let hearts_color_2 = Color::Rgba {
-    //     red: 0.1,
-    //     green: 0.,
-    //     blue: 0.9,
-    //     alpha: 0.9,
-    // };
-    // let hearts_transform_2 = Transform::from_xyz(0., 0., 1.);
-
-    // commands.spawn(MaterialMesh2dBundle {
-    //     mesh: Mesh2dHandle(meshes.add(hearts_quad_2.into())),
-    //     material: materials.add(HeartMaterial {
-    //         color: hearts_color_2,
-    //         num_hearts: Vec2::new(4., 4.),
-    //     }),
-    //     transform: hearts_transform_2,
-    //     ..default()
-    // });
 
     commands.spawn(Camera2dBundle {
         camera: Camera {
@@ -108,6 +81,19 @@ fn setup(
 impl Material2d for HeartMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/heart.wgsl".into()
+    }
+
+    fn specialize(
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayout,
+        key: Material2dKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let frag = descriptor.fragment.as_mut().unwrap();
+
+        let key = key.bind_group_data;
+        frag.shader_defs.push(key.shader_def());
+
+        Ok(())
     }
 }
 
@@ -162,8 +148,35 @@ struct HeartSettings {
     transition: Option<Transition>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HeartMaterialKey {
+    Heart,
+    Ball,
+    Bone,
+    Hat,
+}
+
+impl HeartMaterialKey {
+    fn shader_def(&self) -> ShaderDefVal {
+        match self {
+            HeartMaterialKey::Heart => "BVB_UI_HEART",
+            HeartMaterialKey::Ball => "BVB_UI_BALL",
+            HeartMaterialKey::Bone => "BVB_UI_BONE",
+            HeartMaterialKey::Hat => "BVB_UI_HAT",
+        }
+        .into()
+    }
+}
+
+impl<const N: usize> From<&HeartMaterial<N>> for HeartMaterialKey {
+    fn from(material: &HeartMaterial<N>) -> Self {
+        material.variant
+    }
+}
+
 #[derive(AsBindGroup, TypeUuid, Debug, Clone)]
 #[uuid = "ff664fca-c02f-11ed-bf9f-325096b39f47"]
+#[bind_group_data(HeartMaterialKey)]
 pub struct HeartMaterial<const N: usize = 32> {
     #[uniform(0)]
     color: Color,
@@ -188,6 +201,8 @@ pub struct HeartMaterial<const N: usize = 32> {
 
     // screen space position, anchored at quad's top left corner
     position: Vec2,
+
+    variant: HeartMaterialKey,
 }
 
 #[derive(Debug, Clone, Default, Copy)]
@@ -225,13 +240,19 @@ impl Transition {
 }
 
 impl<const N: usize> HeartMaterial<N> {
-    pub fn new(color: Color, size: f32, num_hearts: usize, position: Vec2) -> Self {
-        assert!(num_hearts <= 32);
+    pub fn new(
+        color: Color,
+        size: f32,
+        num: usize,
+        position: Vec2,
+        variant: HeartMaterialKey,
+    ) -> Self {
+        assert!(num <= 32);
 
-        let mut hearts = [Default::default(); N];
+        let mut all_data = [Default::default(); N];
 
-        for heart in hearts.iter_mut().take(num_hearts) {
-            *heart = HeartData {
+        for data in all_data.iter_mut().take(num) {
+            *data = HeartData {
                 opacity: 1.0,
                 scale: 1.0,
                 angle: 1.0,
@@ -241,17 +262,34 @@ impl<const N: usize> HeartMaterial<N> {
 
         Self {
             color,
-            active_hearts: num_hearts as f32,
-            target_num_hearts: num_hearts,
+            active_hearts: num as f32,
+            target_num_hearts: num,
             mouse: Default::default(),
-            hearts,
+            hearts: all_data,
             heart_settings: [Default::default(); N],
             size,
             position,
+            variant,
         }
     }
 
-    pub fn add_heart(&mut self, settings: TransitionSettings) {
+    pub fn new_hearts(color: Color, size: f32, num: usize, position: Vec2) -> Self {
+        Self::new(color, size, num, position, HeartMaterialKey::Heart)
+    }
+
+    pub fn new_balls(color: Color, size: f32, num: usize, position: Vec2) -> Self {
+        Self::new(color, size, num, position, HeartMaterialKey::Ball)
+    }
+
+    pub fn new_bones(color: Color, size: f32, num: usize, position: Vec2) -> Self {
+        Self::new(color, size, num, position, HeartMaterialKey::Bone)
+    }
+
+    pub fn new_hat(color: Color, size: f32, num: usize, position: Vec2) -> Self {
+        Self::new(color, size, num, position, HeartMaterialKey::Hat)
+    }
+
+    pub fn add(&mut self, settings: TransitionSettings) {
         let num = self.target_num_hearts;
 
         if num == 32 {
@@ -277,7 +315,7 @@ impl<const N: usize> HeartMaterial<N> {
         self.target_num_hearts += 1;
     }
 
-    pub fn remove_heart(&mut self, settings: TransitionSettings) {
+    pub fn remove(&mut self, settings: TransitionSettings) {
         let num = self.target_num_hearts;
 
         if num == 0 {
@@ -382,10 +420,6 @@ fn update_heart_materials(
                     };
 
                     let ease = curve.ease(transition.transition_percentage);
-                    // println!(
-                    //     "Updating index {index} to {ease:.4} ({:.4})",
-                    //     transition.transition_percentage
-                    // );
 
                     hearts[index] =
                         HeartData::transition_to_percentage(transition.settings.style, ease);
@@ -448,42 +482,42 @@ fn update_keyboard(
         let speed = 0.8;
 
         if keyboard_input.just_pressed(KeyCode::Q) {
-            heart_material.add_heart(TransitionSettings {
+            heart_material.add(TransitionSettings {
                 speed,
                 style: TransitionStyle::Instant,
             });
         } else if keyboard_input.just_pressed(KeyCode::W) {
-            heart_material.add_heart(TransitionSettings {
+            heart_material.add(TransitionSettings {
                 speed,
                 style: TransitionStyle::Fade,
             });
         } else if keyboard_input.just_pressed(KeyCode::E) {
-            heart_material.add_heart(TransitionSettings {
+            heart_material.add(TransitionSettings {
                 speed,
                 style: TransitionStyle::Scale,
             });
         } else if keyboard_input.just_pressed(KeyCode::R) {
-            heart_material.add_heart(TransitionSettings {
+            heart_material.add(TransitionSettings {
                 speed,
                 style: TransitionStyle::Spin,
             });
         } else if keyboard_input.just_pressed(KeyCode::A) {
-            heart_material.remove_heart(TransitionSettings {
+            heart_material.remove(TransitionSettings {
                 speed,
                 style: TransitionStyle::Instant,
             });
         } else if keyboard_input.just_pressed(KeyCode::S) {
-            heart_material.remove_heart(TransitionSettings {
+            heart_material.remove(TransitionSettings {
                 speed,
                 style: TransitionStyle::Fade,
             });
         } else if keyboard_input.just_pressed(KeyCode::D) {
-            heart_material.remove_heart(TransitionSettings {
+            heart_material.remove(TransitionSettings {
                 speed,
                 style: TransitionStyle::Scale,
             });
         } else if keyboard_input.just_pressed(KeyCode::F) {
-            heart_material.remove_heart(TransitionSettings {
+            heart_material.remove(TransitionSettings {
                 speed,
                 style: TransitionStyle::Spin,
             });
