@@ -217,7 +217,18 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	return res;
 }
 #else ifdef BVB_UI_UNDECIDED
+fn mod_(x: f32, y: f32) -> f32 {
+	return x - y * floor(x / y);
+}
+
 fn map(p: vec3<f32>) -> vec2<f32> {
+
+	let r = 0.4;
+	let hr = r / 2.;
+	var y = mod_(p.y + hr, r) - hr;
+
+	// let y = ((p.y + 1.0 + hr) % r) - hr;
+	// let idx = ceil(p.y + hr / r);
 
 	// let ry = repeat(p.y, 0.4);
 	// let an = globals.time + ry.y * 2.5;
@@ -232,10 +243,22 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	) * p.xz;
 	// let rotated = p.xz;
 
+	// var y = clamp((p.y + 1.) / 2., 0.0, 1.0);
+	// y *= 10.;
+	// let yi = floor(y);
+	// y = fract(y) - 0.5;
+
+	// y /= 1.5;
+	// y += 0.5 * sin(p.y * 5.);
+	// vec3 q = mod(p+2.5, 5.0)-2.5;
+	// let y = (abs(p.y) % 0.3) * sign(p.y);
+
 	let q = vec3(
 		rotated.x,
-		p.y + 0.2 * sin(globals.time * 3.),
+		// p.y + 0.2 * sin(globals.time * 3.),
+		// y,
 		// p.y + 0.4,
+		y,
 		// ry.x,
 		rotated.y,
 	);
