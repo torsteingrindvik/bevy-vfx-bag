@@ -55,16 +55,99 @@ var<uniform> heart_data: array<HeartData, 32>;
 const FLOOR: f32 = 1.0;
 const THING: f32 = 2.0;
 
-fn sd_u(object_1: f32, object_2: f32, k: f32) -> f32 {
-	let h = max(k - abs(object_1 - object_2), 0.0) / k;
-	return min(object_1, object_2) - h * h * k * (1./4.);
+////////////////////////////////////////////////////////////////////////////////
+// Math helpers
+////////////////////////////////////////////////////////////////////////////////
+fn mod_(x: f32, y: f32) -> f32 {
+	return x - y * floor(x / y);
+}
+
+// iq
+fn hash1(n: f32) -> f32
+{
+    return fract(sin(n)*813851.838134);
+}
+
+// iq
+fn forward_sf(i: f32, n: f32) -> vec3<f32>
+{
+    let PI  = 3.141592653589793238;
+    let PHI = 1.618033988749894848;
+    let phi = 2.0*PI*fract(i/PHI);
+    let zi = 1.0 - (2.0*i+1.0)/n;
+    let sinTheta = sqrt( 1.0 - zi*zi);
+    return vec3( cos(phi)*sinTheta, sin(phi)*sinTheta, zi);
+}
+
+// iq
+fn ao(p: vec3<f32>, n: vec3<f32>) -> f32
+{
+	var ao = 0.0;
+
+    for(var i: i32 = 0; i < 32; i++ )
+    {
+        var ap = forward_sf(f32(i), 32.0);
+
+        let h = hash1(f32(i));
+		ap *= sign( dot(ap, n) ) * h*0.1;
+        ao += clamp( map( p + n*0.01 + ap).x*3.0, 0.0, 1.0 );
+    }
+	ao /= 32.0;
+	
+    return clamp( ao*6.0, 0.0, 1.0 );
+}
+
+// iq
+fn normal(p: vec3<f32>) -> vec3<f32> {
+	let eps = vec3(0.001, 0., 0.);
+
+	return normalize(vec3(
+		map(p + eps.xyy).x - map(p - eps.xyy).x,
+		map(p + eps.yxy).x - map(p - eps.yxy).x,
+		map(p + eps.yyx).x - map(p - eps.yyx).x
+	));
+}
+
+fn repeat(p: f32, factor: f32) -> vec2<f32> {
+	let scaled = p / factor;
+	let idx = floor(scaled);
+
+	return vec2((p - factor * idx) - 0.5 * factor, floor(scaled));
+}
+
+fn sabs(v: f32, k: f32) -> f32 {
+	return sqrt(v*v + k);
+}
+
+fn abschill(v: f32) -> f32 {
+	// When v is big the extra term is negligible.
+	// When v is small it smooths it out.
+	return sabs(v, 0.005);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SDF operations
+////////////////////////////////////////////////////////////////////////////////
+// iq
+fn smax(a: f32, b: f32, k: f32) -> f32 {
+	let h = max(k - abs(a - b), 0.);
+	return max(a, b) + h * h / k * 0.25;
+}
+
+// iq
+fn smin(a: f32, b: f32, k: f32) -> f32 {
+	let h = max(k - abs(a - b), 0.0) / k;
+	return min(a, b) - h * h * k * 0.25;
 }
 
 // https://iquilezles.org/articles/smin/
-fn op_union(object_1: f32, object_2: f32) -> f32 {
-	return sd_u(object_1, object_2, 0.13);
+fn op_union(a: f32, b: f32) -> f32 {
+	return smin(a, b, 0.13);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// SDFs
+////////////////////////////////////////////////////////////////////////////////
 fn sd_capsule_x(p: vec3<f32>, h: f32, r: f32) -> f32
 {
 	var p = p;
@@ -93,13 +176,6 @@ fn sd_capsule_x(p: vec3<f32>, h: f32, r: f32) -> f32
 // 	return length(p + 0.2) - radius;
 // }
 
-fn repeat(p: f32, factor: f32) -> vec2<f32> {
-	let scaled = p / factor;
-	let idx = floor(scaled);
-
-	return vec2((p - factor * idx) - 0.5 * factor, floor(scaled));
-}
-
 // fn repeat(p: f32, factor: f32) -> vec2<f32> {
 //     let q = (p % factor) - 0.5 * factor;
 //     return vec2(q, p % factor);
@@ -121,20 +197,15 @@ fn repeat(p: f32, factor: f32) -> vec2<f32> {
 //     ) - 0.5 * factor;
 // }
 
+// iq
+fn sd_box(p: vec3<f32>, b: vec3<f32> ) -> f32 {
+  let q = abs(p) - b;
+  return length(max(q, vec3(0.0))) + min(max(q.x, max(q.y,q.z)), 0.0);
+}
+
 fn ball(p: vec3<f32>, radius: f32) -> f32 {
 	return length(p) - radius;
 }
-
-fn sabs(v: f32, k: f32) -> f32 {
-	return sqrt(v*v + k);
-}
-
-fn abschill(v: f32) -> f32 {
-	// When v is big the extra term is negligible.
-	// When v is small it smooths it out.
-	return sabs(v, 0.005);
-}
-
 
 fn heart(p: vec3<f32>, radius: f32) -> f32 {
 	var p = p;
@@ -148,12 +219,6 @@ fn heart(p: vec3<f32>, radius: f32) -> f32 {
 	return ball(p, radius);
 }
 
-// iq
-fn smax(a: f32, b: f32, k: f32) -> f32 {
-	let h = max(k - abs(a - b), 0.);
-	return max(a, b) + h * h * 0.25 / k;
-}
-
 #ifdef BVB_UI_HEART
 fn map(p: vec3<f32>) -> vec2<f32> {
 	var res = vec2(
@@ -165,12 +230,33 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 }
 #else ifdef BVB_UI_BALL
 fn map(p: vec3<f32>) -> vec2<f32> {
-	var res = vec2(
-		ball(p, 0.5),
+	// Let's split a circle into slices based on radians
+	let num = 12.;
+	let an = 6.28 / num;
+	let p = p * 0.7;
+
+	// This way we can decide which integer slice is closest
+	// to the current point
+	let slice = round(atan2(p.z, p.x) / an);
+	// And this is how much we have to rotate in order to evaluate
+	// the point as-if it was in the first slice
+	let rot = an * slice;
+
+	var q = p;
+	let rotated = mat2x2(
+		cos(rot), -sin(rot),
+		sin(rot), cos(rot)
+	) * q.xz;
+	q.x = rotated.x;
+	q.z = rotated.y;
+
+	var d1 = vec2(
+		ball(q - vec3(0.3, 0.0, 0.0), 0.07),
 		THING
 	);
 
-	return res;
+	return d1;
+
 }
 #else ifdef BVB_UI_BONE
 fn map(p: vec3<f32>) -> vec2<f32> {
@@ -217,107 +303,48 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	return res;
 }
 #else ifdef BVB_UI_UNDECIDED
-fn mod_(x: f32, y: f32) -> f32 {
-	return x - y * floor(x / y);
-}
 
 fn map(p: vec3<f32>) -> vec2<f32> {
+	// Let's split a circle into slices based on radians
+	let num = 12.;
+	let an = 6.28 / num;
+	let p = p * 0.5;
 
-	let r = 0.4;
-	let hr = r / 2.;
-	var y = mod_(p.y + hr, r) - hr;
+	// This way we can decide which integer slice is closest
+	// to the current point
+	let slice = round(atan2(p.z, p.x) / an);
+	// And this is how much we have to rotate in order to evaluate
+	// the point as-if it was in the first slice
+	let rot = an * slice;
 
-	// let y = ((p.y + 1.0 + hr) % r) - hr;
-	// let idx = ceil(p.y + hr / r);
-
-	// let ry = repeat(p.y, 0.4);
-	// let an = globals.time + ry.y * 2.5;
-	let an = globals.time + 2.5;
-
-	let h = 1.0;
-	let hh = h / 2.;
-
+	var q = p;
 	let rotated = mat2x2(
-		cos(an), -sin(an),
-		sin(an), cos(an),
-	) * p.xz;
-	// let rotated = p.xz;
+		cos(rot), -sin(rot),
+		sin(rot), cos(rot)
+	) * q.xz;
+	q.x = rotated.x;
+	q.z = rotated.y;
 
-	// var y = clamp((p.y + 1.) / 2., 0.0, 1.0);
-	// y *= 10.;
-	// let yi = floor(y);
-	// y = fract(y) - 0.5;
-
-	// y /= 1.5;
-	// y += 0.5 * sin(p.y * 5.);
-	// vec3 q = mod(p+2.5, 5.0)-2.5;
-	// let y = (abs(p.y) % 0.3) * sign(p.y);
-
-	let q = vec3(
-		rotated.x,
-		// p.y + 0.2 * sin(globals.time * 3.),
-		// y,
-		// p.y + 0.4,
-		y,
-		// ry.x,
-		rotated.y,
-	);
-
-	var d1 = sd_capsule_x(q, h, 0.10);
-
-	var res = vec2(
-		d1,
+	var d1 = vec2(
+		sd_box(q - vec3(0.3, 0., 0.), vec3(0.05, 0.03, 0.03)),
 		THING
 	);
-	return res;
+	let pball = vec3(p.x, p.y * 5., p.z);
+
+	d1.x = smin(d1.x, ball(pball, 0.25), 0.15);
+
+	// subtract middle
+	d1.x = smax(-(length(p.xz) - 0.15), d1.x, 0.1);
+
+	// d1.x = sd_box(q - vec3(0.3, 0., 0.), vec3(0.05, 0.03, 0.03));
+
+	// let displacement = sin(13. * p.x) * sin(10. * p.y) * sin(25. * p.z) * 0.05;
+	// d1.x += displacement;
+
+	return d1;
 }
 #endif
 
-// iq
-fn hash1(n: f32) -> f32
-{
-    return fract(sin(n)*813851.838134);
-}
-
-// iq
-fn forward_sf(i: f32, n: f32) -> vec3<f32>
-{
-    let PI  = 3.141592653589793238;
-    let PHI = 1.618033988749894848;
-    let phi = 2.0*PI*fract(i/PHI);
-    let zi = 1.0 - (2.0*i+1.0)/n;
-    let sinTheta = sqrt( 1.0 - zi*zi);
-    return vec3( cos(phi)*sinTheta, sin(phi)*sinTheta, zi);
-}
-
-// iq
-fn ao(p: vec3<f32>, n: vec3<f32>) -> f32
-{
-	var ao = 0.0;
-
-    for(var i: i32 = 0; i < 32; i++ )
-    {
-        var ap = forward_sf(f32(i), 32.0);
-
-        let h = hash1(f32(i));
-		ap *= sign( dot(ap, n) ) * h*0.1;
-        ao += clamp( map( p + n*0.01 + ap).x*3.0, 0.0, 1.0 );
-    }
-	ao /= 32.0;
-	
-    return clamp( ao*6.0, 0.0, 1.0 );
-}
-
-
-fn normal(p: vec3<f32>) -> vec3<f32> {
-	let eps = vec3(0.001, 0., 0.);
-
-	return normalize(vec3(
-		map(p + eps.xyy).x - map(p - eps.xyy).x,
-		map(p + eps.yxy).x - map(p - eps.yxy).x,
-		map(p + eps.yyx).x - map(p - eps.yyx).x
-	));
-}
 
 // Returns (distance, material id)
 fn ray_march(
