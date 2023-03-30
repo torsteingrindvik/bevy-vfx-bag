@@ -412,8 +412,8 @@ fn fragment(
 	let pi = 3.1415;
 	let pi2 = pi * 2.;
 
-	// let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * sin(globals.time * 3.));
-	let angle = pi2 * ( (1. - hd.angle) / 2. + 0.2 + 0.02 * globals.time * 3.);
+	let angle = pi2 * ( (1. - hd.angle) / 2. - 0.10 * globals.time);
+	// let angle = pi2 * ( (1. - hd.angle) / 2. + 0.7);
 
 	let r = 1.0;
 
@@ -479,7 +479,7 @@ fn fragment(
 
 		let bottom_up_factor = pow(clamp(0.3 - 0.9 * n.y, 0.0, 0.5), 2.);
 
-		var light_in = vec3(0.0);
+		var light_in = vec3(0.3) * col;
 
 		// create a color for the sun, adjust amplitude by alignment of
 		// geometry, then forget all of it if the current point is not visible
@@ -494,13 +494,13 @@ fn fragment(
 		light_in += vec3(0.4, 1., 0.4) * bottom_up_factor * 2.5;
 
 		let ambient_occ = ao(point + n * 0.01, n);
-		col *= light_in * 0.20;
-		col *= ambient_occ;
+		col *= light_in * 0.40;
+		col *= ambient_occ * ambient_occ;
 
 		// specular
 		let specular_alignment = max(0.0, dot(n, sun_half_vector));
-		let specular = pow(specular_alignment, 16.) * sun_norm_alignment;
-		col += sun_color * specular * sun_unobstructed * 0.05;
+		let specular = pow(specular_alignment, 8.) * sun_norm_alignment;
+		col += sun_color * specular * sun_unobstructed * 0.02;
 
 
 

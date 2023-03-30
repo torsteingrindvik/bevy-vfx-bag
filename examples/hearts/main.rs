@@ -4,8 +4,6 @@ mod examples_common;
 // TODO: https://github.com/bevyengine/bevy/issues/6754
 // Try bloom UI
 
-// use std::default;
-
 use bevy::{
     core_pipeline::clear_color::ClearColorConfig,
     prelude::{shape::Quad, *},
@@ -23,7 +21,7 @@ use bevy::{
 fn main() {
     App::new()
         .add_plugin(examples_common::SaneDefaultsPlugin)
-        .add_plugin(examples_common::ShapesExamplePlugin::default())
+        .add_plugin(examples_common::AnimatedFoxExamplePlugin::default())
         .add_plugin(Material2dPlugin::<HeartMaterial>::default())
         .add_startup_system(setup)
         .add_system(update_mouse)
@@ -38,7 +36,8 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<HeartMaterial>>,
 ) {
-    let size = 280.;
+    // let size = 280.;
+    let size = 120.;
 
     for (idx, (color, variant)) in [
         (Color::RED, HeartMaterialKey::Heart),
@@ -427,8 +426,6 @@ fn update_heart_materials(
                         HeartData::transition_to_percentage(transition.settings.style, ease);
 
                     if transition.is_done() {
-                        println!("T #{index} done");
-
                         let _ = heart_settings.transition.take();
                     }
                 }

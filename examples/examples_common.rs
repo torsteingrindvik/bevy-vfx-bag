@@ -1,3 +1,4 @@
+use bevy::pbr::CascadeShadowConfigBuilder;
 use bevy::{
     diagnostic::FrameTimeDiagnosticsPlugin,
     prelude::*,
@@ -33,6 +34,130 @@ impl Plugin for SaneDefaultsPlugin {
         .add_system(bevy::window::close_on_esc);
     }
 }
+
+#[derive(Debug, Default)]
+pub struct AnimatedFoxExamplePlugin;
+
+impl Plugin for AnimatedFoxExamplePlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(ShouldAdd3dCameraBundle(false))
+            .add_plugin(FrameTimeDiagnosticsPlugin::default())
+            .add_startup_system(fox::setup)
+            .add_startup_system(ui::setup)
+            .add_system(fox::setup_scene_once_loaded)
+            .add_system(ui::fps_text_update);
+    }
+}
+
+mod fox {
+    //! https://github.com/bevyengine/bevy/blob/main/examples/animation/animated_fox.rs
+
+    use super::*;
+
+    #[derive(Resource)]
+    pub struct Animations(Vec<Handle<AnimationClip>>);
+
+    pub fn setup(
+        mut commands: Commands,
+        asset_server: Res<AssetServer>,
+        mut meshes: ResMut<Assets<Mesh>>,
+        mut materials: ResMut<Assets<StandardMaterial>>,
+    ) {
+        // Insert a resource with the current scene information
+        commands.insert_resource(Animations(vec![
+            asset_server.load("models/Fox.glb#Animation2"),
+            asset_server.load("models/Fox.glb#Animation1"),
+            asset_server.load("models/Fox.glb#Animation0"),
+        ]));
+
+        // Camera
+        commands.spawn(Camera3dBundle {
+            transform: Transform::from_xyz(100.0, 100.0, 150.0)
+                .looking_at(Vec3::new(-20.0, 20.0, 0.0), Vec3::Y),
+            ..default()
+        });
+
+        // Plane
+        commands.spawn(PbrBundle {
+            mesh: meshes.add(shape::Plane::from_size(500000.0).into()),
+            material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+            ..default()
+        });
+
+        // Light
+        commands.spawn(DirectionalLightBundle {
+            transform: Transform::from_rotation(Quat::from_euler(
+                EulerRot::ZYX,
+                0.0,
+                1.0,
+                -PI / 4.,
+            )),
+            directional_light: DirectionalLight {
+                shadows_enabled: true,
+                ..default()
+            },
+            cascade_shadow_config: CascadeShadowConfigBuilder {
+                first_cascade_far_bound: 200.0,
+                maximum_distance: 400.0,
+                ..default()
+            }
+            .into(),
+            ..default()
+        });
+
+        // Fox
+        commands.spawn(SceneBundle {
+            scene: asset_server.load("models/Fox.glb#Scene0"),
+            ..default()
+        });
+    }
+
+    // Once the scene is loaded, start the animation
+    pub fn setup_scene_once_loaded(
+        animations: Res<Animations>,
+        mut player: Query<&mut AnimationPlayer>,
+        mut done: Local<bool>,
+    ) {
+        if !*done {
+            if let Ok(mut player) = player.get_single_mut() {
+                player.play(animations.0[0].clone_weak()).repeat();
+                *done = true;
+            }
+        }
+    }
+}
+// #[derive(Debug, Default)]
+// pub struct FlightHelmetExamplePlugin;
+
+// impl Plugin for FlightHelmetExamplePlugin {
+//     fn build(&self, app: &mut App) {
+//         app.insert_resource(ShouldAdd3dCameraBundle(true))
+//             .add_plugin(FrameTimeDiagnosticsPlugin::default())
+//             .add_startup_system(setup_flight_helmet)
+//             .add_startup_system(ui::setup)
+//             .add_system(ui::fps_text_update);
+//     }
+// }
+
+// fn setup_flight_helmet(mut commands: Commands, asset_server: Res<AssetServer>) {
+//     commands.spawn(DirectionalLightBundle {
+//         directional_light: DirectionalLight {
+//             shadows_enabled: true,
+//             ..default()
+//         },
+//         cascade_shadow_config: CascadeShadowConfigBuilder {
+//             num_cascades: 1,
+//             maximum_distance: 1.6,
+//             ..default()
+//         }
+//         .into(),
+//         ..default()
+//     });
+//     commands.spawn(SceneBundle {
+//         scene: asset_server.load("models/FlightHelmet/FlightHelmet.gltf#Scene0"),
+//         ..default()
+//     });
+// }
 
 /// This plugin combines two Bevy examples:
 ///
