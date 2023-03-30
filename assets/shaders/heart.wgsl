@@ -284,15 +284,13 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 
 	// Chop off a ball to get a smooth midsection
 	var d1 = ball(p, 0.6);
-	d1 = smax(d1, abs(p.y) - 0.04, 0.03);
+	d1 = smax(d1, abs(p.y) - 0.03, 0.03);
 
-	// let w = -1.3 + sqrt(length(p.xz)) * 5.;
 	let w = 1.;
 
 	d1 = op_union(
 		d1,	
-		length(p.xz) - 0.60 + sqrt(p.y * 0.45),
-		// ball(vec3(abschill(p.x) + max(0.0, p.y * 0.4), p.y - 0.4, abs(p.z) + max(0.0, p.y * 0.4)), 0.45)
+		length(p.xz) - 0.60 + sqrt(p.y * 0.55),
 	);
 
 	var res = vec2(
@@ -317,7 +315,23 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	// the point as-if it was in the first slice
 	let rot = an * slice;
 
-	var q = p;
+	var q = p * 0.8;
+
+	let a = 6.28 / 30.;
+	let rotz = mat2x2(
+		cos(a), -sin(a),
+		sin(a), cos(a)
+	) * q.xy;
+
+	q.x = rotz.x;
+	q.y = rotz.y;
+	// q += 0.3;
+	// q *= 1.5;
+
+	// place the second SDF (ball), subtract the first (cylinder)
+	var d1 = smax(-(length(q.xz) - 0.1), ball(vec3(q.x, q.y * 4., q.z), 0.2), 0.1);
+
+
 	let rotated = mat2x2(
 		cos(rot), -sin(rot),
 		sin(rot), cos(rot)
@@ -325,23 +339,12 @@ fn map(p: vec3<f32>) -> vec2<f32> {
 	q.x = rotated.x;
 	q.z = rotated.y;
 
-	var d1 = vec2(
-		sd_box(q - vec3(0.3, 0., 0.), vec3(0.05, 0.03, 0.03)),
+	d1 = smin(d1, sd_box(q - vec3(0.21, 0., 0.), vec3(0.03, 0.01, 0.02)), 0.13);
+
+	return vec2(
+		d1,
 		THING
 	);
-	let pball = vec3(p.x, p.y * 5., p.z);
-
-	d1.x = smin(d1.x, ball(pball, 0.25), 0.15);
-
-	// subtract middle
-	d1.x = smax(-(length(p.xz) - 0.15), d1.x, 0.1);
-
-	// d1.x = sd_box(q - vec3(0.3, 0., 0.), vec3(0.05, 0.03, 0.03));
-
-	// let displacement = sin(13. * p.x) * sin(10. * p.y) * sin(25. * p.z) * 0.05;
-	// d1.x += displacement;
-
-	return d1;
 }
 #endif
 
@@ -501,14 +504,14 @@ fn fragment(
 
 
 
-		// /*
+		/*
 		// TODO: Maybe make a debug flag or something?
 		if (idx < 1u) {
 			col = vec3(ambient_occ);
 		} else if idx < 2u {
 			col = vec3(n);
 		}
-		//  */
+		 */
 	}
 
     // return vec4(col + vec3(p, 0.)*0.01, max(a, 0.2));
