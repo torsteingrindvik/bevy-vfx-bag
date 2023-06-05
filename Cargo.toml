@@ -11,6 +11,13 @@ repository = "https://github.com/torsteingrindvik/bevy-vfx-bag"
 
 exclude = [".github/", "scripts/"]
 
+[features]
+
+default = ["sdr"]
+
+hdr = []
+sdr = []
+
 [dependencies]
 bevy = { version = "0.10", default-features = false, features = [
     "bevy_asset",

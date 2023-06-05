@@ -175,7 +175,12 @@ pub(crate) fn render_pipeline_descriptor(
             shader,
             shader_defs,
             entry_point: "fragment".into(),
+
+            #[cfg(feature = "sdr")]
             targets: vec![Some(TextureFormat::bevy_default().into())],
+
+            #[cfg(feature = "hdr")]
+            targets: vec![Some(ViewTarget::TEXTURE_FORMAT_HDR.into())],
         }),
         push_constant_ranges: vec![],
     }
