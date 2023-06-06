@@ -211,13 +211,20 @@ pub struct Mask {
     /// Run the masks example to experiment with these values interactively.
     pub strength: f32,
 
+    /// How much the mask is faded: 1.0 - mask has no effect, 0.0 - mask is in full effect
+    pub fade: f32,
+
     /// Which [`MaskVariant`] to produce.
     pub variant: MaskVariant,
 }
 
 impl Display for Mask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Mask {:?}, strength: {}", self.variant, self.strength)
+        write!(
+            f,
+            "Mask {:?}, strength: {} fade: {}",
+            self.variant, self.strength, self.fade
+        )
     }
 }
 
@@ -226,6 +233,7 @@ impl Mask {
     pub fn square() -> Self {
         Self {
             strength: 20.,
+            fade: 0.,
             variant: MaskVariant::Square,
         }
     }
@@ -234,6 +242,7 @@ impl Mask {
     pub fn crt() -> Self {
         Self {
             strength: 80000.,
+            fade: 0.,
             variant: MaskVariant::Crt,
         }
     }
@@ -242,6 +251,7 @@ impl Mask {
     pub fn vignette() -> Self {
         Self {
             strength: 0.66,
+            fade: 0.,
             variant: MaskVariant::Vignette,
         }
     }
@@ -258,12 +268,14 @@ impl Default for Mask {
 #[derive(Debug, ShaderType, Clone, Component, Copy)]
 pub struct MaskUniform {
     pub(crate) strength: f32,
+    pub(crate) fade: f32,
 }
 
 impl From<Mask> for MaskUniform {
     fn from(mask: Mask) -> Self {
         Self {
             strength: mask.strength,
+            fade: mask.fade,
         }
     }
 }
