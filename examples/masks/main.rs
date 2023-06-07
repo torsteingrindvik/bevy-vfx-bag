@@ -61,6 +61,8 @@ fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<
         mask.fade -= 0.01;
     };
 
+    mask.fade = mask.fade.clamp(0.0, 1.0);
+
     // Let user go to low- and high strength values directly via L and H keys
     let low = || match mask.variant {
         MaskVariant::Square => 3.,
