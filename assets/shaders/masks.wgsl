@@ -10,6 +10,7 @@ var<uniform> globals: Globals;
 
 struct Mask {
     strength: f32,
+    fade: f32,
 };
 @group(1) @binding(0)
 var<uniform> mask: Mask;
@@ -24,7 +25,7 @@ fn square(uv: vec2<f32>) -> f32 {
     let uv_big = saturate(uv * mask.strength);
     let uv_big_inv = saturate((1. - uv) * mask.strength);
 
-    // By multiplying the mirrored borders we can get a full border. 
+    // By multiplying the mirrored borders we can get a full border.
     let square = uv_big * uv_big_inv;
 
     // The border is made by saturing UV coordinates.
@@ -84,5 +85,5 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let result = vignette(in.uv);
     #endif
 
-    return vec4<f32>(sample.rgb * result, 1.0);
+    return vec4<f32>(sample.rgb * saturate(result + mask.fade), 1.0);
 }

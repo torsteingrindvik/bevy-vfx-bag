@@ -20,7 +20,7 @@ fn main() {
 }
 
 fn startup(mut commands: Commands) {
-    info!("Press [1|2|3] to change which mask is in use, [Up|Down] to change strenght, [L|H] to go low/high");
+    info!("Press [1|2|3] to change which mask is in use, [Up|Down] to change strenght, [L|H] to go low/high [PgUp/PgDown] to fade in/out the mask");
 
     commands
         .spawn(Camera3dBundle {
@@ -54,6 +54,14 @@ fn update(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Mask, With<
     } else if keyboard_input.pressed(KeyCode::Down) {
         mask.strength -= increment();
     };
+
+    if keyboard_input.pressed(KeyCode::PageUp) {
+        mask.fade += 0.01;
+    } else if keyboard_input.pressed(KeyCode::PageDown) {
+        mask.fade -= 0.01;
+    };
+
+    mask.fade = mask.fade.clamp(0.0, 1.0);
 
     // Let user go to low- and high strength values directly via L and H keys
     let low = || match mask.variant {
