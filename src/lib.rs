@@ -6,6 +6,9 @@
 /// Post processing effects.
 pub mod post_processing;
 
+/// Materials.
+pub mod materials;
+
 mod plugin;
 
 pub use plugin::BevyVfxBagPlugin;
