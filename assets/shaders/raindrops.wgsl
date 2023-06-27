@@ -11,7 +11,9 @@ var<uniform> globals: Globals;
 struct Raindrops {
     time_scaling: f32,
     intensity: f32,
-    zoom: f32
+    zoom: f32,
+    
+    _padding: f32,
 };
 
 @group(1) @binding(0)

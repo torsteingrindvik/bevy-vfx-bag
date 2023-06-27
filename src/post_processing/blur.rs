@@ -139,6 +139,9 @@ pub struct Blur {
     /// when blurring.
     /// This is in UV coordinates, so small (positive) values are expected (`0.01` is a good start).
     pub kernel_radius: f32,
+
+    /// Padding.
+    pub _padding: Vec2,
 }
 
 impl Default for Blur {
@@ -146,6 +149,7 @@ impl Default for Blur {
         Self {
             amount: 0.5,
             kernel_radius: 0.01,
+            _padding: Vec2::ZERO,
         }
     }
 }

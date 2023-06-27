@@ -10,7 +10,9 @@ var<uniform> globals: Globals;
 
 struct Blur {
     amount: f32,
-    kernel_radius: f32
+    kernel_radius: f32,
+    
+    _padding: vec2<f32>,
 };
 @group(1) @binding(0)
 var<uniform> blur: Blur;

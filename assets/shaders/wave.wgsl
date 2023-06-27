@@ -17,7 +17,9 @@ struct Wave {
     speed_y: f32,
 
     amplitude_x: f32,
-    amplitude_y: f32
+    amplitude_y: f32,
+
+    _padding: vec2<f32>,
 };
 
 @group(1) @binding(0)

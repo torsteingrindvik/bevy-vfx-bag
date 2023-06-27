@@ -11,6 +11,8 @@ var<uniform> globals: Globals;
 struct Flip {
     x: f32,
     y: f32,
+
+    _padding: vec2<f32>,
 };
 @group(1) @binding(0)
 var<uniform> flip: Flip;

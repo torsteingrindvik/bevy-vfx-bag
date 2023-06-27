@@ -10,6 +10,8 @@ var<uniform> globals: Globals;
 
 struct Pixelate {
     block_size: f32,
+    
+    _padding: vec3<f32>,
 };
 @group(1) @binding(0)
 var<uniform> pixelate: Pixelate;
