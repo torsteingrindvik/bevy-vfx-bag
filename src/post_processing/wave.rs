@@ -50,6 +50,9 @@ pub struct Wave {
 
     /// How much displacement the y axis waves cause.
     pub amplitude_y: f32,
+
+    /// Padding.
+    pub _padding: Vec2,
 }
 
 #[derive(Resource)]

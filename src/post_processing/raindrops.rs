@@ -224,6 +224,9 @@ pub struct Raindrops {
 
     /// How zoomed in the raindrops texture is.
     pub zoom: f32,
+
+    /// Padding.
+    pub _padding: f32,
 }
 
 impl Default for Raindrops {
@@ -232,6 +235,7 @@ impl Default for Raindrops {
             speed: 0.8,
             warping: 0.03,
             zoom: 1.0,
+            _padding: 0.0,
         }
     }
 }

@@ -141,11 +141,17 @@ pub struct Pixelate {
     ///
     /// The shader sets a lower bound to 1.0, since that would not change the outcome.
     pub block_size: f32,
+
+    /// Padding.
+    pub _padding: Vec3,
 }
 
 impl Default for Pixelate {
     fn default() -> Self {
-        Self { block_size: 8.0 }
+        Self {
+            block_size: 8.0,
+            _padding: Vec3::ZERO,
+        }
     }
 }
 

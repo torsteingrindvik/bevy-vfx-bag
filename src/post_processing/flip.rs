@@ -134,18 +134,23 @@ fn queue(
 pub struct FlipUniform {
     pub(crate) x: f32,
     pub(crate) y: f32,
+    pub(crate) _padding: Vec2,
 }
 
 impl From<Flip> for FlipUniform {
     fn from(flip: Flip) -> Self {
         let uv = match flip {
-            Flip::None => [0.0, 0.0],
-            Flip::Horizontal => [1.0, 0.0],
-            Flip::Vertical => [0.0, 1.0],
-            Flip::HorizontalVertical => [1.0, 1.0],
+            Flip::None => (0.0, 0.0),
+            Flip::Horizontal => (1.0, 0.0),
+            Flip::Vertical => (0.0, 1.0),
+            Flip::HorizontalVertical => (1.0, 1.0),
         };
 
-        Self { x: uv[0], y: uv[1] }
+        Self {
+            x: uv.0,
+            y: uv.1,
+            _padding: Vec2::ZERO,
+        }
     }
 }
 
