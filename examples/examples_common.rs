@@ -1,10 +1,10 @@
 use bevy::{
     diagnostic::FrameTimeDiagnosticsPlugin,
     prelude::*,
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat}, asset::ChangeWatcher,
 };
 use core::f32::consts::PI;
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 /// Adds some "sane defaults" for showing examples/development:
 ///
@@ -25,12 +25,12 @@ impl Plugin for SaneDefaultsPlugin {
         app.add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
-                    watch_for_changes: true,
+                    watch_for_changes: ChangeWatcher::with_delay(Duration::from_millis(200)),
                     ..default()
                 })
                 .set(ImagePlugin::default_nearest()),
         )
-        .add_system(bevy::window::close_on_esc);
+        .add_systems(Update, bevy::window::close_on_esc);
     }
 }
 
@@ -59,11 +59,9 @@ pub(crate) struct ShouldAdd3dCameraBundle(bool);
 impl Plugin for ShapesExamplePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(ShouldAdd3dCameraBundle(self.add_3d_camera_bundle))
-            .add_plugin(FrameTimeDiagnosticsPlugin::default())
-            .add_startup_system(shapes::setup)
-            .add_startup_system(ui::setup)
-            .add_system(shapes::rotate)
-            .add_system(ui::fps_text_update);
+            .add_plugins(FrameTimeDiagnosticsPlugin::default())
+            .add_systems(Startup, (ui::setup, shapes::setup))
+            .add_systems(Update, (shapes::rotate, ui::fps_text_update));
     }
 }
 
@@ -201,7 +199,7 @@ mod shapes {
 ////////////////////////////////////////////////////////////////////////////////
 
 mod ui {
-    use bevy::diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin};
+    use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, DiagnosticsStore};
 
     use super::*;
 
@@ -232,11 +230,8 @@ mod ui {
                 .with_style(Style {
                     align_self: AlignSelf::FlexEnd,
                     position_type: PositionType::Absolute,
-                    position: UiRect {
-                        top: Val::Px(5.0),
-                        right: Val::Px(15.0),
-                        ..default()
-                    },
+                    top: Val::Px(5.0),
+                    right: Val::Px(15.0),
                     ..default()
                 }),
             )
@@ -244,7 +239,7 @@ mod ui {
     }
 
     pub(crate) fn fps_text_update(
-        diagnostics: Res<Diagnostics>,
+        diagnostics: Res<DiagnosticsStore>,
         mut query: Query<&mut Text, With<FpsText>>,
     ) {
         for mut text in &mut query {

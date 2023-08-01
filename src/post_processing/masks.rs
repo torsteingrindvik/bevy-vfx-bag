@@ -14,7 +14,7 @@ use bevy::{
             ShaderStages, ShaderType, SpecializedRenderPipeline, SpecializedRenderPipelines,
         },
         renderer::RenderDevice,
-        RenderSet,
+        Render, RenderSet,
     },
 };
 use std::fmt::Display;
@@ -70,18 +70,21 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Mask>::default())
-            .add_plugin(UniformComponentPlugin::<MaskUniform>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<Mask>::default(),
+            UniformComponentPlugin::<MaskUniform>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Mask>.in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Mask>,
             )
             .init_resource::<MaskData>()
             .init_resource::<UniformBindGroup<MaskUniform>>()
             .init_resource::<SpecializedRenderPipelines<MaskData>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<MaskUniform>>();
     }
 }

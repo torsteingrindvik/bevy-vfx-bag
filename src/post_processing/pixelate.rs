@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bevy::render::RenderSet;
+use bevy::render::{Render, RenderSet};
 pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -72,18 +72,20 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Pixelate>::default())
-            .add_plugin(UniformComponentPlugin::<Pixelate>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<Pixelate>::default(),
+            UniformComponentPlugin::<Pixelate>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Pixelate>
-                    .in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Pixelate>,
             )
             .init_resource::<PixelateData>()
             .init_resource::<UniformBindGroup<Pixelate>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Pixelate>>();
     }
 }

@@ -1,5 +1,5 @@
-#import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_render::globals
+#import bevy_core_pipeline::fullscreen_vertex_shader FullscreenVertexOutput
+#import bevy_render::globals Globals
 
 @group(0) @binding(0)
 var t: texture_2d<f32>;

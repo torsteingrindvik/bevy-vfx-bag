@@ -14,7 +14,7 @@ use bevy::{
         camera::ExtractedCamera,
         extract_component::DynamicUniformIndex,
         globals::{GlobalsBuffer, GlobalsUniform},
-        render_graph::{Node, NodeRunError, RenderGraphContext, SlotInfo, SlotType},
+        render_graph::{Node, NodeRunError, RenderGraphContext},
         render_phase::{
             sort_phase_system, CachedRenderPipelinePhaseItem, DrawFunctionId, DrawFunctions,
             PhaseItem, RenderCommand, RenderCommandResult, RenderPhase, SetItemPipeline,
@@ -32,7 +32,7 @@ use bevy::{
         renderer::{RenderContext, RenderDevice},
         texture::BevyDefault,
         view::{ExtractedView, ViewTarget},
-        Extract, RenderApp, RenderSet,
+        Extract, Render, RenderApp, RenderSet,
     },
     utils::{FloatOrd, HashMap},
 };
@@ -296,7 +296,10 @@ fn queue_post_processing_shared_bind_groups(
     views: Query<(Entity, &ViewTarget), With<PostProcessingCamera>>,
 ) {
     for (_, view_target) in &views {
-        for texture_view in [view_target.main_texture(), view_target.main_texture_other()] {
+        for texture_view in [
+            view_target.main_texture_view(),
+            view_target.main_texture_other_view(),
+        ] {
             let id = &texture_view.id();
             if !bind_groups.cached_texture_bind_groups.contains_key(id) {
                 bind_groups.cached_texture_bind_groups.insert(
@@ -464,9 +467,6 @@ struct PostProcessingNode {
 }
 
 impl PostProcessingNode {
-    /// The slot input name.
-    pub const IN_VIEW: &'static str = "view";
-
     /// Create a a new post processing node.
     pub fn new(world: &mut World) -> Self {
         Self {
@@ -482,10 +482,6 @@ impl FromWorld for PostProcessingNode {
 }
 
 impl Node for PostProcessingNode {
-    fn input(&self) -> Vec<SlotInfo> {
-        vec![SlotInfo::new(Self::IN_VIEW, SlotType::Entity)]
-    }
-
     fn update(&mut self, world: &mut World) {
         self.query.update_archetypes(world);
     }
@@ -497,7 +493,7 @@ impl Node for PostProcessingNode {
         world: &World,
     ) -> Result<(), NodeRunError> {
         let shared_bind_groups = world.resource::<PostProcessingSharedBindGroups>();
-        let view_entity = graph.get_input_entity(Self::IN_VIEW)?;
+        let view_entity = graph.view_entity();
 
         let (camera, view_target, phase) = match self.query.get_manual(world, view_entity) {
             Ok(result) => result,
@@ -591,7 +587,11 @@ pub(crate) fn render_app(app: &mut App) -> &mut App {
 pub(crate) struct PostProcessingPlugin;
 
 impl Plugin for PostProcessingPlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {
+    }
+
+    fn finish(&self, app: &mut App) {
+
         let render_app = app
             .get_sub_app_mut(RenderApp)
             .expect("Need a render app for post processing");
@@ -605,20 +605,28 @@ impl Plugin for PostProcessingPlugin {
 
         render_app
             .init_resource::<DrawFunctions<PostProcessingPhaseItem>>()
-            .init_resource::<PostProcessingSharedBindGroups>()
             .init_resource::<PostProcessingSharedLayout>()
-            .add_system(extract_camera_phases.in_schedule(ExtractSchedule))
-            .add_system(queue_post_processing_shared_bind_groups.in_set(RenderSet::Queue))
-            .add_system(sort_phase_system::<PostProcessingPhaseItem>.in_set(RenderSet::PhaseSort));
+            .init_resource::<PostProcessingSharedBindGroups>()
+            .add_systems(ExtractSchedule, extract_camera_phases)
+            .add_systems(
+                Render,
+                queue_post_processing_shared_bind_groups.in_set(RenderSet::Queue),
+            )
+            .add_systems(
+                Render,
+                sort_phase_system::<PostProcessingPhaseItem>.in_set(RenderSet::PhaseSort),
+            );
 
-        app.add_plugin(blur::Plugin);
-        app.add_plugin(chromatic_aberration::Plugin);
-        app.add_plugin(flip::Plugin);
-        app.add_plugin(lut::Plugin);
-        app.add_plugin(masks::Plugin);
-        app.add_plugin(raindrops::Plugin);
-        app.add_plugin(pixelate::Plugin);
-        app.add_plugin(wave::Plugin);
+        app.add_plugins((
+            blur::Plugin,
+            chromatic_aberration::Plugin,
+            flip::Plugin,
+            lut::Plugin,
+            masks::Plugin,
+            raindrops::Plugin,
+            pixelate::Plugin,
+            wave::Plugin,
+        ));
     }
 }
 

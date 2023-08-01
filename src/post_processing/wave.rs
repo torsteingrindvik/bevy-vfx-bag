@@ -1,4 +1,4 @@
-use bevy::render::RenderSet;
+use bevy::render::{Render, RenderSet};
 pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -94,17 +94,20 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Wave>::default())
-            .add_plugin(UniformComponentPlugin::<Wave>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<Wave>::default(),
+            UniformComponentPlugin::<Wave>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Wave>.in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Wave>,
             )
             .init_resource::<WaveData>()
             .init_resource::<UniformBindGroup<Wave>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Wave>>();
     }
 }

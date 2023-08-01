@@ -9,7 +9,7 @@ use bevy::render::{
         TextureSampleType, TextureViewDimension,
     },
     texture::{CompressedImageFormats, ImageType},
-    RenderSet,
+    Render, RenderSet,
 };
 pub(crate) use bevy::{
     asset::load_internal_asset,
@@ -38,7 +38,7 @@ pub(crate) const RAINDROPS_SHADER_HANDLE: HandleUntyped =
 const RAINDROPS_IMAGE_HANDLE: HandleUntyped =
     HandleUntyped::weak_from_u64(Image::TYPE_UUID, 10600833861652934799);
 
-#[derive(Resource, ExtractResource, Deref, DerefMut, Clone)]
+#[derive(Resource, ExtractResource, Deref, DerefMut, Clone, Hash)]
 struct RaindropsTextureHandle(Handle<Image>);
 
 #[derive(Resource)]
@@ -133,22 +133,24 @@ impl bevy::prelude::Plugin for Plugin {
         assets.set_untracked(RAINDROPS_IMAGE_HANDLE, image);
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Raindrops>::default())
-            .add_plugin(UniformComponentPlugin::<Raindrops>::default())
-            .add_plugin(ExtractResourcePlugin::<RaindropsTextureHandle>::default())
-            .insert_resource(RaindropsTextureHandle(
-                RAINDROPS_IMAGE_HANDLE.clone_weak().typed(),
-            ));
+        app.add_plugins((
+            ExtractComponentPlugin::<Raindrops>::default(),
+            UniformComponentPlugin::<Raindrops>::default(),
+            ExtractResourcePlugin::<RaindropsTextureHandle>::default(),
+        ))
+        .insert_resource(RaindropsTextureHandle(
+            RAINDROPS_IMAGE_HANDLE.clone_weak().typed(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Raindrops>
-                    .in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Raindrops>,
             )
             .init_resource::<RaindropsData>()
             .init_resource::<UniformBindGroup<Raindrops>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Raindrops>>();
     }
 }
@@ -188,7 +190,7 @@ fn queue(
     bind_group.inner = None;
 
     if let (Some(uniforms), Some(raindrops_image)) =
-        (uniforms.binding(), images.get(&texture_handle))
+        (uniforms.binding(), images.get(&texture_handle.0))
     {
         if !views.is_empty() {
             bind_group.inner = Some(render_device.create_bind_group(&BindGroupDescriptor {

@@ -8,6 +8,6 @@ pub struct BevyVfxBagPlugin;
 
 impl Plugin for BevyVfxBagPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(post_processing::PostProcessingPlugin);
+        app.add_plugins(post_processing::PostProcessingPlugin);
     }
 }
