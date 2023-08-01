@@ -1,6 +1,6 @@
 use std::{f32::consts::PI, fmt::Display};
 
-use bevy::render::{render_phase::AddRenderCommand, RenderSet};
+use bevy::render::{render_phase::AddRenderCommand, Render, RenderSet};
 pub(crate) use bevy::{
     asset::load_internal_asset,
     ecs::query::QueryItem,
@@ -72,17 +72,17 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<ChromaticAberration>::default())
-            .add_plugin(UniformComponentPlugin::<ChromaticAberration>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<ChromaticAberration>::default(),
+            UniformComponentPlugin::<ChromaticAberration>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<ChromaticAberration>.in_schedule(ExtractSchedule),
-            )
+            .add_systems(ExtractSchedule, super::extract_post_processing_camera_phases::<ChromaticAberration>)
             .init_resource::<ChromaticAberrationData>()
             .init_resource::<UniformBindGroup<ChromaticAberration>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<ChromaticAberration>>(
             );
     }

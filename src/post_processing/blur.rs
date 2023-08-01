@@ -15,7 +15,7 @@ use bevy::{
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
         },
         renderer::RenderDevice,
-        RenderSet,
+        Render, RenderSet,
     },
 };
 
@@ -68,17 +68,20 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Blur>::default())
-            .add_plugin(UniformComponentPlugin::<Blur>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<Blur>::default(),
+            UniformComponentPlugin::<Blur>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Blur>.in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Blur>,
             )
             .init_resource::<BlurData>()
             .init_resource::<UniformBindGroup<Blur>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<Blur>>();
     }
 }

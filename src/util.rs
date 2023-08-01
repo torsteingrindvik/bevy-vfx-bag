@@ -18,14 +18,7 @@ pub fn add_nodes<T: FromWorld + render_graph::Node>(
 
         graph.add_node(name_3d.to_owned(), node);
 
-        graph.add_slot_edge(
-            graph.input_node().id,
-            core_3d::graph::input::VIEW_ENTITY,
-            name_3d.to_owned(),
-            "view",
-        );
-
-        graph.add_node_edge(core_3d::graph::node::MAIN_PASS, name_3d.to_owned());
+        graph.add_node_edge(core_3d::graph::node::MAIN_OPAQUE_PASS, name_3d.to_owned());
 
         graph.add_node_edge(
             name_3d.to_owned(),
@@ -40,13 +33,6 @@ pub fn add_nodes<T: FromWorld + render_graph::Node>(
             .expect("Graph should be available");
 
         graph.add_node(name_2d.to_owned(), node);
-
-        graph.add_slot_edge(
-            graph.input_node().id,
-            core_2d::graph::input::VIEW_ENTITY,
-            name_2d.to_owned(),
-            "view",
-        );
 
         graph.add_node_edge(
             name_2d.to_owned(),

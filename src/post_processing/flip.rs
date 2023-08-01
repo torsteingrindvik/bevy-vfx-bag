@@ -13,7 +13,7 @@ use bevy::{
             BindingType, BufferBindingType, CachedRenderPipelineId, ShaderStages, ShaderType,
         },
         renderer::RenderDevice,
-        RenderSet,
+        Render, RenderSet,
     },
 };
 use std::fmt::Display;
@@ -67,17 +67,20 @@ impl bevy::prelude::Plugin for Plugin {
         );
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Flip>::default())
-            .add_plugin(UniformComponentPlugin::<FlipUniform>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<Flip>::default(),
+            UniformComponentPlugin::<FlipUniform>::default(),
+        ));
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Flip>.in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Flip>,
             )
             .init_resource::<FlipData>()
             .init_resource::<UniformBindGroup<FlipUniform>>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawPostProcessingEffect<FlipUniform>>();
     }
 }

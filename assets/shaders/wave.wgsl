@@ -1,6 +1,6 @@
-#import bevy_core_pipeline::fullscreen_vertex_shader
-#import bevy_render::globals
-#import bevy_pbr::utils
+#import bevy_core_pipeline::fullscreen_vertex_shader FullscreenVertexOutput
+#import bevy_render::globals Globals
+#import bevy_pbr::utils PI
 
 @group(0) @binding(0)
 var source: texture_2d<f32>;

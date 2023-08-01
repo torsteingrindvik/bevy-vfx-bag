@@ -21,7 +21,7 @@ use bevy::{
         },
         renderer::RenderDevice,
         texture::{CompressedImageFormats, ImageType},
-        RenderSet,
+        Render, RenderSet,
     },
 };
 
@@ -168,16 +168,17 @@ impl bevy::prelude::Plugin for Plugin {
         assets.set_untracked(LUT_ARCTIC_IMAGE_HANDLE, image);
 
         // This puts the uniform into the render world.
-        app.add_plugin(ExtractComponentPlugin::<Lut>::default())
-            .add_system(adapt_image_for_lut_use.in_base_set(CoreSet::PostUpdate));
+        app.add_plugins(ExtractComponentPlugin::<Lut>::default())
+            .add_systems(PostUpdate, adapt_image_for_lut_use);
 
         super::render_app(app)
-            .add_system(
-                super::extract_post_processing_camera_phases::<Lut>.in_schedule(ExtractSchedule),
+            .add_systems(
+                ExtractSchedule,
+                super::extract_post_processing_camera_phases::<Lut>,
             )
             .init_resource::<LutData>()
-            .add_system(prepare.in_set(RenderSet::Prepare))
-            .add_system(queue.in_set(RenderSet::Queue))
+            .add_systems(Render, prepare.in_set(RenderSet::Prepare))
+            .add_systems(Render, queue.in_set(RenderSet::Queue))
             .add_render_command::<PostProcessingPhaseItem, DrawLut>();
     }
 }
